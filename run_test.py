@@ -202,7 +202,7 @@ def main():
     args = parser.parse_args()
 
     config = load_config()
-    repo_path = config["repository"]["local_path"]
+    repo_path = "."  # текущая директория (workspace Jenkins)
     
     if not os.path.exists(repo_path):
         print("Репозиторий не найден. Запустите generate_test.py")
