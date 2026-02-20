@@ -18,16 +18,13 @@ pipeline {
         string(
             name: 'BRANCH_NAME',
             defaultValue: 'master',
-            description: 'Ветка для проверки дубликатов (например feature/duplicates-test)'
+            description: 'Ветка для проверки дубликатов'
         )
     }
 
     environment {
         PATH = "/var/lib/jenkins/.local/bin:$PATH"
         ALLURE_RESULTS = "allure-results"
-        TESTOPS_ENDPOINT = 'https://testops.moscow.alfaintra.net'
-        TESTOPS_PROJECT_ID = '643'
-        TESTOPS_SERVER_ID = 'testops'
     }
 
     stages {
@@ -38,7 +35,7 @@ pipeline {
                     branches: [[name: "${params.BRANCH_NAME}"]],
                     userRemoteConfigs: [[
                         url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
-                        credentialsId: 'git_pass'  // ← твой актуальный ID для Bitbucket
+                        credentialsId: 'git_pass'  // твой ID
                     ]]
                 ])
             }
@@ -57,6 +54,7 @@ pipeline {
 
         stage('Run Duplicate Checks') {
             steps {
+                // Здесь creds передаются явно
                 withCredentials([
                     usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
                     usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
@@ -65,6 +63,8 @@ pipeline {
                         . venv/bin/activate
                         rm -rf ${ALLURE_RESULTS}
                         mkdir -p ${ALLURE_RESULTS}
+                        echo "GIT_USER is set: $GIT_USER"   // ← проверка в логе (удали потом)
+                        echo "GIT_PASS is set: $GIT_PASS"   // ← проверка (удали потом)
                         python run_test.py --branch ${BRANCH_NAME}
                     """
                 }
@@ -74,25 +74,19 @@ pipeline {
 
     post {
         always {
-            // Локальный Allure-отчёт в Jenkins
-            allure([
-                includeProperties: false,
-                jdk: '',
-                properties: [],
-                reportBuildPolicy: 'ALWAYS',
-                results: [[path: 'allure-results']]
-            ])
+            allure includeProperties: false,
+                   jdk: '',
+                   results: [[path: 'allure-results']]
 
-            // Загрузка в TestOps через allureTestOpsUpload (по рекомендации разработчика)
             script {
                 try {
-                    echo "Загружаю результаты в Allure TestOps (project 643)..."
+                    echo "Загружаю результаты в Allure TestOps..."
                     allureTestOpsUpload(
                         allureResultsPath: 'allure-results',
                         endpoint: 'https://testops.moscow.alfaintra.net',
                         projectId: '643'
                     )
-                    echo "Загрузка в TestOps завершена"
+                    echo "Загрузка завершена"
                 } catch (Exception e) {
                     echo "Не удалось загрузить в TestOps: ${e}"
                 }
