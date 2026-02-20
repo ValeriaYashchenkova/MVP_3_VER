@@ -58,19 +58,22 @@ pipeline {
             usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
             usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
         ]) {
-            sh """
+            sh '''
+                set -e
                 . venv/bin/activate
-                echo "GIT_USER: \$GIT_USER"   // ← отладка
-                echo "GIT_PASS: \$GIT_PASS"   // ← отладка (пароль замаскируется)
-                echo "DB_USER: \$DB_USER"
-                echo "DB_PASS: \$DB_PASS"
-                rm -rf ${ALLURE_RESULTS}
-                mkdir -p ${ALLURE_RESULTS}
-                python run_test.py --branch ${BRANCH_NAME}
-            """
+
+                echo "Shell sees:"
+                env | grep -E 'GIT_|DB_'
+
+                rm -rf $ALLURE_RESULTS
+                mkdir -p $ALLURE_RESULTS
+
+                python run_test.py --branch "$BRANCH_NAME"
+            '''
         }
     }
 }
+
 
 
     post {
