@@ -40,15 +40,15 @@ pipeline {
         }
 
         stage('Create venv & Install dependencies') {
-            steps {
-                sh """
-                    python3.7 -m venv venv || true
-                    . venv/bin/activate
-                    pip3.7 install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
-                    pip3.7 install oracledb gitpython requests tomli -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
-                """
-            }
-        }
+    steps {
+        sh """
+            python3.7 -m venv venv || true
+            . venv/bin/activate
+            pip3.7 install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+            pip3.7 install oracledb gitpython requests tomli keyring -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+        """
+    }
+}
 
         stage('Run Duplicate Checks') {
             steps {
