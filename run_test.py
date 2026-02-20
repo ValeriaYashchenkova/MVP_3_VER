@@ -1,3 +1,4 @@
+# run_test.py
 import os
 import sys
 import oracledb
@@ -8,6 +9,8 @@ import json
 import argparse
 import time
 import warnings
+import zipfile      # ← добавлено
+import requests     # ← добавлено
 
 warnings.filterwarnings("ignore", category=ResourceWarning)
 
@@ -37,48 +40,18 @@ def get_db_credentials(config):
     return db_user, db_password
 
 def checkout_and_pull_branch(repo, branch_name):
-    """
-    Переключается на ветку и делает pull.
-    Если creds переданы — использует HTTPS-аутентификацию.
-    Если нет — пытается работать без, но предупреждает.
-    """
-    git_user = os.environ.get('GIT_USER')
-    git_pass = os.environ.get('GIT_PASS')
+    repo.remotes.origin.fetch()
+    remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
     
-    if git_user and git_pass:
-        print("Используем git-креды из Jenkins (GIT_USER/GIT_PASS)")
-        auth_url = f"https://{git_user}:{git_pass}@git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
-        repo.remotes.origin.config_writer.set("url", auth_url)
-    else:
-        print("Предупреждение: GIT_USER/GIT_PASS не найдены — git fetch/pull без аутентификации")
-        print("Если репозиторий требует авторизации — билд упадёт. Проверь creds в Jenkins.")
+    if branch_name not in remote_branches:
+        print(f"Ветка '{branch_name}' не найдена")
+        print("Доступные:", ", ".join(sorted(remote_branches)) or "— пусто —")
+        sys.exit(1)
     
-    try:
-        print("Выполняем git fetch...")
-        repo.remotes.origin.fetch()
-        
-        remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
-        
-        if branch_name not in remote_branches:
-            print(f"Ветка '{branch_name}' не найдена в удалённом репозитории")
-            print("Доступные ветки:", ", ".join(sorted(remote_branches)) if remote_branches else "— пусто —")
-            sys.exit(1)
-        
-        print(f"Переключаемся на ветку: {branch_name}")
-        repo.git.checkout(branch_name)
-        
-        print(f"Подтягиваем изменения...")
-        repo.git.pull('origin', branch_name)
-        
-    except git.exc.GitCommandError as e:
-        print(f"Ошибка git-команды: {e}")
-        print(f"Команда: {e.command}")
-        print(f"Вывод ошибки: {e.stderr}")
-        # Если ошибка именно на аутентификации — продолжаем, если репозиторий уже склонирован
-        if "could not read Username" in str(e) or "authentication" in str(e).lower():
-            print("Продолжаем без fetch/pull — возможно, локальная копия уже актуальна")
-        else:
-            sys.exit(1)
+    print(f"Переключаемся на ветку: {branch_name}")
+    repo.git.checkout(branch_name)
+    print(f"Подтягиваем изменения...")
+    repo.git.pull('origin', branch_name)
 
 def run_sql_file(sql_path, db_user, db_pass, dsn):
     file_name = os.path.basename(sql_path)
