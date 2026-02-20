@@ -1,15 +1,20 @@
-# run_test.py (или run_test_allure.py)
+# run_test.py
+# Запускает проверки дубликатов на выбранной ветке
+# Генерирует allure-results для последующей загрузки в TestOps через Jenkins
+# Логин/пароль к БД берутся из config.toml (для локального теста)
+# В Jenkins они будут передаваться через переменные окружения (creds)
+
 import os
 import sys
 import oracledb
 import git
 import datetime
-import requests
-import zipfile
+from uuid import uuid4
+import json
 import argparse
-import time
 import warnings
-warnings.filterwarnings("ignore", category=ResourceWarning)  # убирает предупреждение WinError 6
+
+warnings.filterwarnings("ignore", category=ResourceWarning)  # убирает WinError 6 на Windows
 
 try:
     import tomllib
@@ -18,36 +23,41 @@ except ImportError:
 
 CONFIG_FILE = "config.toml"
 
+
 def load_config():
+    """Загружает config.toml"""
     if not os.path.exists(CONFIG_FILE):
         print(f"Ошибка: файл {CONFIG_FILE} не найден!")
-        print("Создай его рядом со скриптом с секциями [database] и [testops]")
         sys.exit(1)
     with open(CONFIG_FILE, "rb") as f:
         return tomllib.load(f)
 
+
 def get_db_credentials(config):
+    """Берёт логин/пароль к БД из config.toml (локально)"""
     db_user = config.get("database", {}).get("db_user")
     db_password = config.get("database", {}).get("db_password")
     
     if not db_user or not db_password:
-        print("Ошибка: в config.toml в секции [database] отсутствуют db_user или db_password")
+        print("Ошибка: в config.toml отсутствуют db_user или db_password")
         print("Пример:")
         print("[database]")
         print("db_user = \"твой_логин\"")
         print("db_password = \"твой_пароль\"")
         sys.exit(1)
     
-    print("Используем логин/пароль из config.toml")
+    print("Логин/пароль к БД взяты из config.toml")
     return db_user, db_password
 
+
 def checkout_and_pull_branch(repo, branch_name):
+    """Переключается на ветку и делает pull"""
     repo.remotes.origin.fetch()
     remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
     
     if branch_name not in remote_branches:
         print(f"Ветка '{branch_name}' не найдена")
-        print("Доступные:", ", ".join(sorted(remote_branches)) or "— пусто —")
+        print("Доступные ветки:", ", ".join(sorted(remote_branches)) if remote_branches else "— пусто —")
         sys.exit(1)
     
     print(f"Переключаемся на ветку: {branch_name}")
@@ -55,7 +65,9 @@ def checkout_and_pull_branch(repo, branch_name):
     print(f"Подтягиваем изменения: git pull origin {branch_name}")
     repo.git.pull('origin', branch_name)
 
+
 def run_sql_file(sql_path, db_user, db_pass, dsn):
+    """Выполняет один .sql-файл и возвращает статус + детали"""
     file_name = os.path.basename(sql_path)
     status = "passed"
     message = "OK — дубликатов не найдено"
@@ -81,12 +93,11 @@ def run_sql_file(sql_path, db_user, db_pass, dsn):
     
     return status, message, details, file_name
 
+
 def create_allure_results(results, branch_name):
+    """Генерирует папку allure-results в формате Allure"""
     allure_dir = "allure-results"
     os.makedirs(allure_dir, exist_ok=True)
-    
-    from uuid import uuid4
-    import json
     
     for r in results:
         test_uuid = str(uuid4())
@@ -115,102 +126,22 @@ def create_allure_results(results, branch_name):
                 "stop": int(datetime.datetime.now().timestamp() * 1000)
             }, f, ensure_ascii=False)
 
-def upload_to_testops(allure_results_dir, config, skip_upload=False):
-    if skip_upload:
-        print("Режим без загрузки: zip создан, но не отправлен")
-        return True
-    
-    project_id = config.get("testops", {}).get("project_id")
-    token = config.get("testops", {}).get("launch_token")
-    base_url = config.get("testops", {}).get("url", "https://testops.moscow.alfaintra.net")
-    
-    if not project_id or not token:
-        print("Ошибка: в config.toml отсутствует секция [testops] или поля project_id / launch_token")
-        return False
-    
-    zip_path = "allure-results.zip"
-    
-    print(f"Архивирую папку {allure_results_dir} → {zip_path}")
-    
-    try:
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, files in os.walk(allure_results_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, allure_results_dir)
-                    zipf.write(file_path, arcname)
-                    print(f"  + {arcname}")
-        
-        url = f"{base_url}/api/launch/upload"
-        headers = {"Authorization": f"Api-Token {token}"}
-        params = {"projectId": project_id}
-        
-        print(f"\nОтправка POST на: {url}")
-        print(f"Параметры: projectId={project_id}")
-        
-        with open(zip_path, "rb") as zip_file:
-            files = {"file": ("allure-results.zip", zip_file, "application/zip")}
-            
-            response = requests.post(
-                url,
-                headers=headers,
-                params=params,
-                files=files,
-                timeout=120,
-                verify=False
-            )
-        
-        response.raise_for_status()
-        
-        data = response.json()
-        launch_url = data.get("launchUrl") or data.get("url") or data.get("location", "ссылка не получена")
-        
-        print("\n=== УСПЕХ ===")
-        print("Результаты загружены в TestOps")
-        print(f"Ссылка на запуск: {launch_url}")
-        return True
-        
-    except requests.exceptions.RequestException as e:
-        print(f"\nОшибка HTTP-запроса: {e}")
-        if 'response' in locals():
-            print(f"Код ответа: {response.status_code}")
-            print("Текст ответа:", response.text)
-        return False
-        
-    except Exception as e:
-        print("\nНеизвестная ошибка при загрузке:", str(e))
-        return False
-        
-    finally:
-        if os.path.exists(zip_path):
-            for attempt in range(3):
-                try:
-                    time.sleep(0.5 * attempt)
-                    os.remove(zip_path)
-                    print(f"Zip удалён: {zip_path}")
-                    break
-                except PermissionError:
-                    print(f"Zip занят ({attempt+1}/3)...")
-                except Exception as rm_err:
-                    print(f"Не удалось удалить zip: {rm_err}")
-                    break
 
 def main():
     parser = argparse.ArgumentParser(description="Запуск проверки дубликатов по SQL-скриптам")
-    parser.add_argument('--branch', help='Название ветки (опционально)')
-    parser.add_argument('--no-upload', action='store_true', help='Не загружать в TestOps (только локально)')
+    parser.add_argument('--branch', required=True, help='Название ветки (обязательно)')
     args = parser.parse_args()
 
     config = load_config()
-    repo_path = "."  # текущая директория (workspace Jenkins)
+    repo_path = "."  # в Jenkins — корень workspace
     
-    if not os.path.exists(repo_path):
-        print("Репозиторий не найден. Запустите generate_test.py")
+    if not os.path.exists(os.path.join(repo_path, ".git")):
+        print("Репозиторий не найден в текущей директории")
         sys.exit(1)
     
     repo = git.Repo(repo_path)
     
-    branch_name = args.branch or input("Название ветки: ").strip()
+    branch_name = args.branch
     checkout_and_pull_branch(repo, branch_name)
     
     tests_dir = os.path.join(repo_path, config["tests"]["tests_directory"])
@@ -218,7 +149,7 @@ def main():
     
     if not sql_files:
         print("SQL-скрипты не найдены")
-        return
+        sys.exit(1)
     
     db_user, db_pass = get_db_credentials(config)
     dsn = config["database"]["default_dsn"]
@@ -234,7 +165,9 @@ def main():
     
     create_allure_results(results, branch_name)
     
-    upload_to_testops("allure-results", config, skip_upload=args.no_upload)
+    print("\nГотово! Папка allure-results создана.")
+    print("Jenkins сам загрузит её в TestOps через withAllureUpload.")
+
 
 if __name__ == "__main__":
     main()
