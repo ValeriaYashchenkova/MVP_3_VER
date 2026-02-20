@@ -25,9 +25,11 @@ pipeline {
     environment {
         PATH = "/var/lib/jenkins/.local/bin:$PATH"
         ALLURE_RESULTS = "allure-results"
+        BRANCH_NAME = "${params.BRANCH_NAME}"   // <-- ВОТ ЭТО КЛЮЧ
     }
 
     stages {
+
         stage('Checkout SCM') {
             steps {
                 checkout([
@@ -35,7 +37,7 @@ pipeline {
                     branches: [[name: "${params.BRANCH_NAME}"]],
                     userRemoteConfigs: [[
                         url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
-                        credentialsId: 'git_pass'  // твой ID
+                        credentialsId: 'git_pass'
                     ]]
                 ])
             }
@@ -43,38 +45,37 @@ pipeline {
 
         stage('Create venv & Install dependencies') {
             steps {
-                sh """
-                    python3.7 -m venv venv || true
+                sh '''
+                    python3.11 -m venv venv || true
                     . venv/bin/activate
-                    pip3.7 install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
-                    pip3.7 install oracledb gitpython requests tomli -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
-                """
+                    pip install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+                    pip install oracledb gitpython requests tomli -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+                '''
             }
         }
 
         stage('Run Duplicate Checks') {
-    steps {
-        withCredentials([
-            usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
-            usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
-        ]) {
-            sh '''
-                set -e
-                . venv/bin/activate
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
+                    usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
+                ]) {
+                    sh '''
+                        set -e
+                        . venv/bin/activate
 
-                echo "Shell sees:"
-                env | grep -E 'GIT_|DB_'
+                        echo "===== ENV CHECK ====="
+                        env | grep -E 'GIT_|DB_|BRANCH'
 
-                rm -rf $ALLURE_RESULTS
-                mkdir -p $ALLURE_RESULTS
+                        rm -rf $ALLURE_RESULTS
+                        mkdir -p $ALLURE_RESULTS
 
-                python run_test.py --branch "$BRANCH_NAME"
-            '''
+                        python run_test.py --branch "$BRANCH_NAME"
+                    '''
+                }
+            }
         }
     }
-}
-
-
 
     post {
         always {
