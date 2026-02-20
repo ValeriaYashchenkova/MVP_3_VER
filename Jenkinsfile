@@ -7,9 +7,7 @@ pipeline {
     }
 
     triggers {
-        pollSCM('')  // Автоматический запуск при изменениях в репозитории
-        // Если нужен периодический запуск — раскомментируй:
-        // cron('H/30 * * * *')  // каждые 30 минут
+        pollSCM('')  // автоматический запуск при изменениях в репозитории
     }
 
     options {
@@ -21,7 +19,7 @@ pipeline {
         string(
             name: 'BRANCH_NAME',
             defaultValue: 'master',
-            description: 'Ветка для запуска проверки дубликатов (например feature/duplicates-test)'
+            description: 'Ветка для проверки дубликатов (например feature/duplicates-test)'
         )
     }
 
@@ -30,7 +28,7 @@ pipeline {
         ALLURE_RESULTS = "allure-results"
         TESTOPS_ENDPOINT = 'https://testops.moscow.alfaintra.net'
         TESTOPS_PROJECT_ID = '643'
-        TESTOPS_SERVER_ID = 'testops'  // ID сервера в Jenkins (должен совпадать с настройками)
+        TESTOPS_SERVER_ID = 'testops'
     }
 
     stages {
@@ -47,7 +45,7 @@ pipeline {
             }
         }
 
-        stage('Prepare Environment') {
+        stage('Install Dependencies') {
             steps {
                 sh '''
                     python -m venv venv || true
@@ -72,14 +70,12 @@ pipeline {
 
     post {
         always {
-            // 1. Публикуем локальный Allure-отчёт в Jenkins (для удобства)
             allure([
                 includeProperties: false,
                 reportBuildPolicy: 'ALWAYS',
                 results: [[path: "${ALLURE_RESULTS}"]]
             ])
 
-            // 2. Загрузка в Allure TestOps — твой существующий шаг, адаптированный под проект
             script {
                 try {
                     echo "Uploading results to Allure TestOps (project 643)..."
@@ -95,14 +91,10 @@ pipeline {
                     }
                 } catch (Exception e) {
                     echo "Failed to upload to Allure TestOps: ${e}"
-                    // Билд НЕ падает, если TestOps недоступен
                 }
             }
 
-            // 3. Архивация результатов (на всякий случай)
             archiveArtifacts artifacts: "${ALLURE_RESULTS}/**", allowEmptyArchive: true
-
-            // 4. Очистка workspace
             cleanWs()
         }
     }
