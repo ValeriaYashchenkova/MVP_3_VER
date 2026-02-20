@@ -1,0 +1,21 @@
+[repository]
+url = "https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
+local_path = "./bialm_ft_auto"
+default_branch = "master"
+git_service_name = "bitbucket_auto_tests"
+
+[database]
+default_dsn = "BIDBTST1:1521/DB12TST2"
+db_service_name = "oracle_db_tests"
+
+[tests]
+tests_directory = "tests"
+test_file_prefix = "check_duplicates_"
+
+[behavior]
+auto_stash = true
+confirm_before_push = true
+
+[testops]
+project_id = "643"
+url = "https://testops.moscow.alfaintra.net"
