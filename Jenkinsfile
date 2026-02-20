@@ -45,15 +45,24 @@ pipeline {
         }
 
         stage('Install Dependencies') {
-            steps {
-                sh '''
-                    python -m venv venv || true
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install oracledb gitpython requests tomli
-                '''
-            }
-        }
+    steps {
+        sh '''
+            if command -v python3 &> /dev/null; then
+                PYTHON_CMD=python3
+            elif command -v python &> /dev/null; then
+                PYTHON_CMD=python
+            else
+                echo "Python not found!"
+                exit 1
+            fi
+            
+            $PYTHON_CMD -m venv venv || true
+            . venv/bin/activate
+            pip install --upgrade pip
+            pip install oracledb gitpython requests tomli
+        '''
+    }
+}
 
         stage('Run Duplicate Checks') {
             steps {
