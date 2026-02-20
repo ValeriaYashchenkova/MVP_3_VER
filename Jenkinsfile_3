@@ -2,7 +2,6 @@ pipeline {
     agent {
         kubernetes {
             inheritFrom 'python'
-            defaultContainer 'python-builder'
         }
     }
 
@@ -10,45 +9,42 @@ pipeline {
         string(name: 'BRANCH_NAME', defaultValue: 'master')
     }
 
-    environment {
-        ALLURE_RESULTS = "allure-results"
-    }
-
     stages {
-
-        stage('Checkout SCM') {
-            steps {
-                checkout scm
-            }
-        }
 
         stage('Install deps') {
             steps {
-                sh '''
-                    python3.11 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install oracledb gitpython requests tomli
-                '''
+                container('python-builder') {
+                    sh '''
+                        python3.11 -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip
+                        pip install oracledb gitpython requests tomli
+                    '''
+                }
             }
         }
 
         stage('Run tests') {
             steps {
-                withCredentials([
-                    usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
-                    usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
-                ]) {
-                    sh '''
-                        . venv/bin/activate
+                container('python-builder') {
+                    withCredentials([
+                        usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
+                        usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
+                    ]) {
+                        sh '''
+                            echo "CHECK CREDS:"
+                            env | grep GIT_
 
-                        python run_test.py \
-                            --branch "${BRANCH_NAME}" \
-                            --git-user "${GIT_USER}" \
-                            --git-pass "${GIT_PASS}" \
-                            --db-user "${DB_USER}" \
-                            --db-pass "${DB_PASS}"
-                    '''
+                            . venv/bin/activate
+
+                            python run_test.py \
+                                --branch "${BRANCH_NAME}" \
+                                --git-user "${GIT_USER}" \
+                                --git-pass "${GIT_PASS}" \
+                                --db-user "${DB_USER}" \
+                                --db-pass "${DB_PASS}"
+                        '''
+                    }
                 }
             }
         }
