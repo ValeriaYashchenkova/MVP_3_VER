@@ -1,11 +1,18 @@
+# run_test.py (или run_test_allure.py)
 import os
 import sys
 import oracledb
 import keyring
 import git
 import datetime
+import requests
+import zipfile
 import argparse
 import getpass
+import time
+import warnings
+warnings.filterwarnings("ignore", category=ResourceWarning)  # убирает предупреждение WinError 6
+
 try:
     import tomllib
 except ImportError:
@@ -15,12 +22,22 @@ CONFIG_FILE = "config.toml"
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        print(f"Конфиг {CONFIG_FILE} не найден!")
+        print(f"Ошибка: файл {CONFIG_FILE} не найден!")
+        print("Создай его рядом со скриптом с секцией [testops]")
         sys.exit(1)
     with open(CONFIG_FILE, "rb") as f:
         return tomllib.load(f)
 
 def get_db_credentials(config):
+    # Сначала берём из config.toml (для локального теста)
+    db_user = config["database"].get("db_user")
+    db_password = config["database"].get("db_password")
+    
+    if db_user and db_password:
+        print("Используем логин/пароль из config.toml (локальный режим)")
+        return db_user, db_password
+    
+    # Если нет — fallback на keyring (для Jenkins в будущем)
     service = config["database"]["db_service_name"]
     user = keyring.get_password(service, "username")
     password = keyring.get_password(service, "password")
@@ -44,9 +61,9 @@ def checkout_and_pull_branch(repo, branch_name):
         print("Доступные:", ", ".join(sorted(remote_branches)) or "— пусто —")
         sys.exit(1)
     
-    print(f"→ checkout {branch_name}")
+    print(f"Переключаемся на ветку: {branch_name}")
     repo.git.checkout(branch_name)
-    print(f"→ pull origin/{branch_name}")
+    print(f"Подтягиваем изменения: git pull origin {branch_name}")
     repo.git.pull('origin', branch_name)
 
 def run_sql_file(sql_path, db_user, db_pass, dsn):
@@ -88,27 +105,111 @@ def create_allure_results(results, branch_name):
         
         status_map = {"passed": "passed", "failed": "failed", "broken": "broken"}
         
+        attachments = []
+        if r["details"]:
+            attach_filename = f"{test_uuid}-details.txt"
+            attach_path = os.path.join(allure_dir, attach_filename)
+            with open(attach_path, 'w', encoding='utf-8') as f:
+                f.write(r["details"])
+            attachments = [{"name": "Детали", "source": attach_filename, "type": "text/plain"}]
+        
         with open(test_file, 'w', encoding='utf-8') as f:
             json.dump({
                 "name": r["file"],
                 "description": r["message"],
                 "status": status_map.get(r["status"], "broken"),
                 "steps": [{"name": "Выполнение SQL", "status": status_map.get(r["status"], "broken")}],
-                "attachments": [{"name": "Детали", "source": f"{test_uuid}-details.txt", "type": "text/plain"} if r["details"] else []],
+                "attachments": attachments,
                 "labels": [{"name": "branch", "value": branch_name}],
                 "uuid": test_uuid,
                 "start": int(datetime.datetime.now().timestamp() * 1000),
                 "stop": int(datetime.datetime.now().timestamp() * 1000)
             }, f, ensure_ascii=False)
+
+def upload_to_testops(allure_results_dir, config, skip_upload=False):
+    if skip_upload:
+        print("Режим без загрузки: zip создан, но не отправлен")
+        return True
+    
+    project_id = config.get("testops", {}).get("project_id")
+    token = config.get("testops", {}).get("launch_token")
+    base_url = config.get("testops", {}).get("url", "https://testops.moscow.alfaintra.net")
+    
+    if not project_id or not token:
+        print("Ошибка: в config.toml отсутствует секция [testops] или поля project_id / launch_token")
+        return False
+    
+    zip_path = "allure-results.zip"
+    
+    print(f"Архивирую папку {allure_results_dir} → {zip_path}")
+    
+    try:
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, files in os.walk(allure_results_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, allure_results_dir)
+                    zipf.write(file_path, arcname)
+                    print(f"  + {arcname}")
         
-        if r["details"]:
-            attach_path = os.path.join(allure_dir, f"{test_uuid}-details.txt")
-            with open(attach_path, 'w', encoding='utf-8') as f:
-                f.write(r["details"])
+        url = f"{base_url}/api/launch/upload"  # правильный эндпоинт из твоего Swagger
+        headers = {"Authorization": f"Api-Token {token}"}
+        params = {"projectId": project_id}
+        
+        print(f"\nОтправка POST на: {url}")
+        print(f"Параметры: projectId={project_id}")
+        
+        with open(zip_path, "rb") as zip_file:
+            files = {"file": ("allure-results.zip", zip_file, "application/zip")}
+            
+            response = requests.post(
+                url,
+                headers=headers,
+                params=params,
+                files=files,
+                timeout=120,
+                verify=False  # отключаем проверку self-signed сертификата
+            )
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        launch_url = data.get("launchUrl") or data.get("url") or data.get("location", "ссылка не получена")
+        
+        print("\n=== УСПЕХ ===")
+        print("Результаты загружены в TestOps")
+        print(f"Ссылка на запуск: {launch_url}")
+        return True
+        
+    except requests.exceptions.RequestException as e:
+        print(f"\nОшибка HTTP-запроса: {e}")
+        if 'response' in locals():
+            print(f"Код ответа: {response.status_code}")
+            print("Текст ответа:", response.text)
+        return False
+        
+    except Exception as e:
+        print("\nНеизвестная ошибка при загрузке:", str(e))
+        return False
+        
+    finally:
+        if os.path.exists(zip_path):
+            for attempt in range(3):
+                try:
+                    time.sleep(0.5 * attempt)
+                    os.remove(zip_path)
+                    print(f"Zip удалён: {zip_path}")
+                    break
+                except PermissionError:
+                    print(f"Zip занят ({attempt+1}/3)...")
+                except Exception as rm_err:
+                    print(f"Не удалось удалить zip: {rm_err}")
+                    break
 
 def main():
     parser = argparse.ArgumentParser(description="Запуск проверки дубликатов по SQL-скриптам")
     parser.add_argument('--branch', help='Название ветки (опционально)')
+    parser.add_argument('--no-upload', action='store_true', help='Не загружать в TestOps (только локально)')
     args = parser.parse_args()
 
     config = load_config()
@@ -144,8 +245,7 @@ def main():
     
     create_allure_results(results, branch_name)
     
-    print("\nГотово! Папка allure-results создана.")
-    print("Запусти Jenkins job test_alm_1 на этой ветке — он загрузит результаты в TestOps.")
+    upload_to_testops("allure-results", config, skip_upload=args.no_upload)
 
 if __name__ == "__main__":
     main()
