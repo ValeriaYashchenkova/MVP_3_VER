@@ -1,4 +1,3 @@
-# run_test.py
 import os
 import sys
 import oracledb
@@ -9,8 +8,8 @@ import json
 import argparse
 import time
 import warnings
-import zipfile      # ← добавлено
-import requests     # ← добавлено
+import zipfile
+import requests
 
 warnings.filterwarnings("ignore", category=ResourceWarning)
 
@@ -34,6 +33,10 @@ def get_db_credentials(config):
     
     if not db_user or not db_password:
         print("Ошибка: в config.toml отсутствуют db_user или db_password")
+        print("Пример:")
+        print("[database]")
+        print("db_user = \"твой_логин\"")
+        print("db_password = \"твой_пароль\"")
         sys.exit(1)
     
     print("Логин/пароль к БД взяты из config.toml")
@@ -41,7 +44,7 @@ def get_db_credentials(config):
 
 def checkout_and_pull_branch(repo, branch_name):
     """
-    Переключается на ветку и делает pull, используя логин/пароль из config.toml
+    Переключается на ветку и делает pull с использованием логина/пароля из config.toml
     """
     # Читаем логин/пароль к Bitbucket из конфига
     git_user = config["repository"].get("git_user")
@@ -60,7 +63,7 @@ def checkout_and_pull_branch(repo, branch_name):
     # Формируем URL с аутентификацией
     auth_url = f"https://{git_user}:{git_pass}@git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
     
-    # Перезаписываем URL remote (чтобы git использовал логин/пароль)
+    # Перезаписываем URL remote
     repo.remotes.origin.config_writer.set("url", auth_url)
     
     try:
