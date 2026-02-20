@@ -7,16 +7,31 @@ pipeline {
     }
 
     parameters {
-        string(name: 'BRANCH_NAME', defaultValue: 'master', description: 'Ветка для проверки')
+        string(
+            name: 'BRANCH_NAME',
+            defaultValue: 'master',
+            description: 'Ветка для запуска SQL проверок'
+        )
     }
 
     environment {
         ALLURE_RESULTS = "allure-results"
     }
 
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        timestamps()
+    }
+
     stages {
 
-        stage('Checkout') {
+        stage('Clean workspace') {
+            steps {
+                cleanWs()
+            }
+        }
+
+        stage('Checkout repository') {
             steps {
                 checkout([
                     $class: 'GitSCM',
@@ -29,13 +44,28 @@ pipeline {
             }
         }
 
-        stage('Install Python deps') {
+        stage('Show workspace (debug)') {
+            steps {
+                sh '''
+                    echo "Current directory:"
+                    pwd
+                    echo "Files:"
+                    ls -la
+                '''
+            }
+        }
+
+        stage('Create virtualenv & install deps') {
             steps {
                 sh '''
                     python3.11 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install oracledb tomli
+
+                    venv/bin/pip install --upgrade pip \
+                      -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+
+                    venv/bin/pip install \
+                      oracledb tomli requests \
+                      -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
                 '''
             }
         }
@@ -43,11 +73,17 @@ pipeline {
         stage('Run SQL checks') {
             steps {
                 withCredentials([
-                    usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
+                    usernamePassword(
+                        credentialsId: 'oracle-db-creds',
+                        usernameVariable: 'DB_USER',
+                        passwordVariable: 'DB_PASS'
+                    )
                 ]) {
                     sh '''
-                        . venv/bin/activate
-                        python run_test.py --branch "${BRANCH_NAME}"
+                        echo "DB_USER detected: ${DB_USER:+YES}"
+                        echo "Starting tests..."
+
+                        venv/bin/python run_test.py --branch "${BRANCH_NAME}"
                     '''
                 }
             }
