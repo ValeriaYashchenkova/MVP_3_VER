@@ -1,9 +1,3 @@
-# run_test.py
-# Запускает проверки дубликатов на выбранной ветке
-# Генерирует allure-results для последующей загрузки в TestOps через Jenkins
-# Логин/пароль к БД берутся из config.toml (для локального теста)
-# В Jenkins они будут передаваться через переменные окружения (creds)
-
 import os
 import sys
 import oracledb
@@ -12,9 +6,6 @@ import datetime
 from uuid import uuid4
 import json
 import argparse
-import warnings
-
-warnings.filterwarnings("ignore", category=ResourceWarning)  # убирает WinError 6 на Windows
 
 try:
     import tomllib
@@ -23,9 +14,7 @@ except ImportError:
 
 CONFIG_FILE = "config.toml"
 
-
 def load_config():
-    """Загружает config.toml"""
     if not os.path.exists(CONFIG_FILE):
         print(f"Ошибка: файл {CONFIG_FILE} не найден!")
         sys.exit(1)
@@ -33,31 +22,25 @@ def load_config():
         return tomllib.load(f)
 
 
-def get_db_credentials(config):
-    """Берёт логин/пароль к БД из config.toml (локально)"""
-    db_user = config.get("database", {}).get("db_user")
-    db_password = config.get("database", {}).get("db_password")
+def get_db_credentials():
+    db_user = os.environ.get('DB_USER')
+    db_pass = os.environ.get('DB_PASS')
     
-    if not db_user or not db_password:
-        print("Ошибка: в config.toml отсутствуют db_user или db_password")
-        print("Пример:")
-        print("[database]")
-        print("db_user = \"твой_логин\"")
-        print("db_password = \"твой_пароль\"")
+    if not db_user or not db_pass:
+        print("Ошибка: DB_USER или DB_PASS не установлены в окружении (creds Jenkins)")
         sys.exit(1)
     
-    print("Логин/пароль к БД взяты из config.toml")
-    return db_user, db_password
+    print("Логин/пароль к БД взяты из переменных окружения Jenkins")
+    return db_user, db_pass
 
 
 def checkout_and_pull_branch(repo, branch_name):
-    """Переключается на ветку и делает pull"""
     repo.remotes.origin.fetch()
     remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
     
     if branch_name not in remote_branches:
         print(f"Ветка '{branch_name}' не найдена")
-        print("Доступные ветки:", ", ".join(sorted(remote_branches)) if remote_branches else "— пусто —")
+        print("Доступные:", ", ".join(sorted(remote_branches)) or "— пусто —")
         sys.exit(1)
     
     print(f"Переключаемся на ветку: {branch_name}")
@@ -67,7 +50,6 @@ def checkout_and_pull_branch(repo, branch_name):
 
 
 def run_sql_file(sql_path, db_user, db_pass, dsn):
-    """Выполняет один .sql-файл и возвращает статус + детали"""
     file_name = os.path.basename(sql_path)
     status = "passed"
     message = "OK — дубликатов не найдено"
@@ -95,7 +77,6 @@ def run_sql_file(sql_path, db_user, db_pass, dsn):
 
 
 def create_allure_results(results, branch_name):
-    """Генерирует папку allure-results в формате Allure"""
     allure_dir = "allure-results"
     os.makedirs(allure_dir, exist_ok=True)
     
@@ -129,11 +110,11 @@ def create_allure_results(results, branch_name):
 
 def main():
     parser = argparse.ArgumentParser(description="Запуск проверки дубликатов по SQL-скриптам")
-    parser.add_argument('--branch', required=True, help='Название ветки (обязательно)')
+    parser.add_argument('--branch', required=True, help='Название ветки (обязательно для Jenkins)')
     args = parser.parse_args()
 
     config = load_config()
-    repo_path = "."  # в Jenkins — корень workspace
+    repo_path = "."  # корень workspace Jenkins
     
     if not os.path.exists(os.path.join(repo_path, ".git")):
         print("Репозиторий не найден в текущей директории")
@@ -151,7 +132,7 @@ def main():
         print("SQL-скрипты не найдены")
         sys.exit(1)
     
-    db_user, db_pass = get_db_credentials(config)
+    db_user, db_pass = get_db_credentials()
     dsn = config["database"]["default_dsn"]
     
     results = []
@@ -165,8 +146,7 @@ def main():
     
     create_allure_results(results, branch_name)
     
-    print("\nГотово! Папка allure-results создана.")
-    print("Jenkins сам загрузит её в TestOps через withAllureUpload.")
+    print("\nГотово! Папка allure-results создана для загрузки в TestOps.")
 
 
 if __name__ == "__main__":
