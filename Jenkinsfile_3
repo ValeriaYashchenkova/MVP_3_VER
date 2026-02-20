@@ -2,51 +2,62 @@ pipeline {
     agent {
         kubernetes {
             inheritFrom 'python'
+            defaultContainer 'python-builder'
         }
     }
 
     parameters {
-        string(name: 'BRANCH_NAME', defaultValue: 'master')
+        string(name: 'BRANCH_NAME', defaultValue: 'master', description: 'Ветка для проверки')
+    }
+
+    environment {
+        ALLURE_RESULTS = "allure-results"
     }
 
     stages {
 
-        stage('Install deps') {
+        stage('Checkout') {
             steps {
-                container('python-builder') {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "${params.BRANCH_NAME}"]],
+                    userRemoteConfigs: [[
+                        url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
+                        credentialsId: 'git_pass'
+                    ]]
+                ])
+            }
+        }
+
+        stage('Install Python deps') {
+            steps {
+                sh '''
+                    python3.11 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install oracledb tomli
+                '''
+            }
+        }
+
+        stage('Run SQL checks') {
+            steps {
+                withCredentials([
+                    usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
+                ]) {
                     sh '''
-                        python3.11 -m venv venv
                         . venv/bin/activate
-                        pip install --upgrade pip
-                        pip install oracledb gitpython requests tomli
+                        python run_test.py --branch "${BRANCH_NAME}"
                     '''
                 }
             }
         }
+    }
 
-        stage('Run tests') {
-            steps {
-                container('python-builder') {
-                    withCredentials([
-                        usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
-                        usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
-                    ]) {
-                        sh '''
-                            echo "CHECK CREDS:"
-                            env | grep GIT_
-
-                            . venv/bin/activate
-
-                            python run_test.py \
-                                --branch "${BRANCH_NAME}" \
-                                --git-user "${GIT_USER}" \
-                                --git-pass "${GIT_PASS}" \
-                                --db-user "${DB_USER}" \
-                                --db-pass "${DB_PASS}"
-                        '''
-                    }
-                }
-            }
+    post {
+        always {
+            archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
+            cleanWs()
         }
     }
 }
