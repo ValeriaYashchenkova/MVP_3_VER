@@ -40,18 +40,51 @@ def get_db_credentials(config):
     return db_user, db_password
 
 def checkout_and_pull_branch(repo, branch_name):
-    repo.remotes.origin.fetch()
-    remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
+    """
+    Переключается на ветку и делает pull, используя логин/пароль из config.toml
+    """
+    # Читаем логин/пароль к Bitbucket из конфига
+    git_user = config["repository"].get("git_user")
+    git_pass = config["repository"].get("git_password")
     
-    if branch_name not in remote_branches:
-        print(f"Ветка '{branch_name}' не найдена")
-        print("Доступные:", ", ".join(sorted(remote_branches)) or "— пусто —")
+    if not git_user or not git_pass:
+        print("Ошибка: в config.toml отсутствуют git_user или git_password")
+        print("Пример:")
+        print("[repository]")
+        print("git_user = \"твой_логин\"")
+        print("git_password = \"твой_пароль\"")
         sys.exit(1)
     
-    print(f"Переключаемся на ветку: {branch_name}")
-    repo.git.checkout(branch_name)
-    print(f"Подтягиваем изменения...")
-    repo.git.pull('origin', branch_name)
+    print("Используем логин/пароль к Bitbucket из config.toml")
+    
+    # Формируем URL с аутентификацией
+    auth_url = f"https://{git_user}:{git_pass}@git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
+    
+    # Перезаписываем URL remote (чтобы git использовал логин/пароль)
+    repo.remotes.origin.config_writer.set("url", auth_url)
+    
+    try:
+        print("Выполняем git fetch...")
+        repo.remotes.origin.fetch()
+        
+        remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
+        
+        if branch_name not in remote_branches:
+            print(f"Ветка '{branch_name}' не найдена в удалённом репозитории")
+            print("Доступные ветки:", ", ".join(sorted(remote_branches)) if remote_branches else "— пусто —")
+            sys.exit(1)
+        
+        print(f"Переключаемся на ветку: {branch_name}")
+        repo.git.checkout(branch_name)
+        
+        print(f"Подтягиваем изменения...")
+        repo.git.pull('origin', branch_name)
+        
+    except git.exc.GitCommandError as e:
+        print(f"Ошибка git-команды: {e}")
+        print(f"Команда: {e.command}")
+        print(f"Вывод ошибки: {e.stderr}")
+        sys.exit(1)
 
 def run_sql_file(sql_path, db_user, db_pass, dsn):
     file_name = os.path.basename(sql_path)
