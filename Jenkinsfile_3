@@ -6,99 +6,51 @@ pipeline {
         }
     }
 
-    triggers {
-        pollSCM('')
-    }
-
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '20'))
-    }
-
     parameters {
-        string(
-            name: 'BRANCH_NAME',
-            defaultValue: 'master',
-            description: 'Ветка для проверки дубликатов'
-        )
+        string(name: 'BRANCH_NAME', defaultValue: 'master')
     }
 
     environment {
-        PATH = "/var/lib/jenkins/.local/bin:$PATH"
         ALLURE_RESULTS = "allure-results"
-        BRANCH_NAME = "${params.BRANCH_NAME}"   // <-- ВОТ ЭТО КЛЮЧ
     }
 
     stages {
 
         stage('Checkout SCM') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "${params.BRANCH_NAME}"]],
-                    userRemoteConfigs: [[
-                        url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
-                        credentialsId: 'git_pass'
-                    ]]
-                ])
+                checkout scm
             }
         }
 
-        stage('Create venv & Install dependencies') {
+        stage('Install deps') {
             steps {
                 sh '''
-                    python3.11 -m venv venv || true
+                    python3.11 -m venv venv
                     . venv/bin/activate
-                    pip install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
-                    pip install oracledb gitpython requests tomli -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+                    pip install --upgrade pip
+                    pip install oracledb gitpython requests tomli
                 '''
             }
         }
 
-        stage('Run Duplicate Checks') {
+        stage('Run tests') {
             steps {
                 withCredentials([
                     usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
                     usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
                 ]) {
                     sh '''
-                        set -e
                         . venv/bin/activate
 
-                        echo "===== ENV CHECK ====="
-                        env | grep -E 'GIT_|DB_|BRANCH'
-
-                        rm -rf $ALLURE_RESULTS
-                        mkdir -p $ALLURE_RESULTS
-
-                        python run_test.py --branch "$BRANCH_NAME"
+                        python run_test.py \
+                            --branch "${BRANCH_NAME}" \
+                            --git-user "${GIT_USER}" \
+                            --git-pass "${GIT_PASS}" \
+                            --db-user "${DB_USER}" \
+                            --db-pass "${DB_PASS}"
                     '''
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            allure includeProperties: false,
-                   jdk: '',
-                   results: [[path: 'allure-results']]
-
-            script {
-                try {
-                    echo "Загружаю результаты в Allure TestOps..."
-                    allureTestOpsUpload(
-                        allureResultsPath: 'allure-results',
-                        endpoint: 'https://testops.moscow.alfaintra.net',
-                        projectId: '643'
-                    )
-                    echo "Загрузка завершена"
-                } catch (Exception e) {
-                    echo "Не удалось загрузить в TestOps: ${e}"
-                }
-            }
-
-            archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
-            cleanWs()
         }
     }
 }
