@@ -7,7 +7,7 @@ pipeline {
     }
 
     triggers {
-        pollSCM('')  // следит за изменениями в репозитории
+        pollSCM('')  // запуск при изменениях в репозитории
     }
 
     options {
@@ -33,63 +33,43 @@ pipeline {
     stages {
         stage('Checkout SCM') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: "${params.BRANCH_NAME}"]],
-                    userRemoteConfigs: [[
-                        url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
-                        credentialsId: 'login_password_for_repo_bitbucket'
-                    ]]
-                ])
+                git branch: "${params.BRANCH_NAME}",
+                    url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
+                    credentialsId: 'login_password_for_repo_bitbucket'
             }
         }
 
-       stage('Install Dependencies') {
-    steps {
-        sh '''
-            # Устанавливаем python3-venv, если его нет (для Debian/Ubuntu-based образов)
-            apt-get update && apt-get install -y python3-venv || true
-            
-            # Определяем, какая команда python доступна
-            if command -v python3 &> /dev/null; then
-                PYTHON_CMD=python3
-            elif command -v python &> /dev/null; then
-                PYTHON_CMD=python
-            else
-                echo "Python not found!"
-                exit 1
-            fi
-            
-            $PYTHON_CMD -m venv venv || true
-            . venv/bin/activate
-            pip install --upgrade pip
-            pip install oracledb gitpython requests tomli
-        '''
-    }
-}
+        stage('Create venv & Install dependencies') {
+            steps {
+                sh """
+                    python3.7 -m venv venv || true
+                    . venv/bin/activate
+                    pip3.7 install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+                    pip3.7 install oracledb gitpython requests tomli -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+                """
+            }
+        }
 
         stage('Run Duplicate Checks') {
             steps {
-                sh '''
+                sh """
                     . venv/bin/activate
                     rm -rf ${ALLURE_RESULTS}
                     mkdir -p ${ALLURE_RESULTS}
                     python run_test.py --branch ${BRANCH_NAME}
-                '''
+                """
             }
         }
     }
 
     post {
         always {
-            // 1. Локальный Allure-отчёт в Jenkins
-            allure([
-                includeProperties: false,
-                reportBuildPolicy: 'ALWAYS',
-                results: [[path: "${ALLURE_RESULTS}"]]
-            ])
+            // Локальный Allure-отчёт в Jenkins
+            allure includeProperties: false,
+                   jdk: '',
+                   results: [[path: 'allure-results']]
 
-            // 2. Загрузка в Allure TestOps — исправленный шаг разработчика
+            // Загрузка в Allure TestOps — твой шаг разработчика
             script {
                 try {
                     echo "Uploading results to Allure TestOps (project 643)..."
@@ -105,11 +85,11 @@ pipeline {
                     }
                 } catch (Exception e) {
                     echo "Failed to upload to Allure TestOps: ${e}"
-                    // Билд НЕ падает, если TestOps недоступен
+                    // Не падаем билд, если TestOps недоступен
                 }
             }
 
-            archiveArtifacts artifacts: "${ALLURE_RESULTS}/**", allowEmptyArchive: true
+            archiveArtifacts artifacts: 'allure-results/**', allowEmptyArchive: true
             cleanWs()
         }
     }
