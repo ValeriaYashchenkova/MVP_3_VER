@@ -53,24 +53,25 @@ pipeline {
         }
 
         stage('Run Duplicate Checks') {
-            steps {
-                // Здесь creds передаются явно
-                withCredentials([
-                    usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
-                    usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
-                ]) {
-                    sh """
-                        . venv/bin/activate
-                        rm -rf ${ALLURE_RESULTS}
-                        mkdir -p ${ALLURE_RESULTS}
-                        echo "GIT_USER is set: $GIT_USER"   // ← проверка в логе (удали потом)
-                        echo "GIT_PASS is set: $GIT_PASS"   // ← проверка (удали потом)
-                        python run_test.py --branch ${BRANCH_NAME}
-                    """
-                }
-            }
+    steps {
+        withCredentials([
+            usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
+            usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
+        ]) {
+            sh """
+                . venv/bin/activate
+                echo "GIT_USER: \$GIT_USER"   // ← отладка
+                echo "GIT_PASS: \$GIT_PASS"   // ← отладка (пароль замаскируется)
+                echo "DB_USER: \$DB_USER"
+                echo "DB_PASS: \$DB_PASS"
+                rm -rf ${ALLURE_RESULTS}
+                mkdir -p ${ALLURE_RESULTS}
+                python run_test.py --branch ${BRANCH_NAME}
+            """
         }
     }
+}
+
 
     post {
         always {
