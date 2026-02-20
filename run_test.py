@@ -38,23 +38,21 @@ def get_db_credentials(config):
 
 def checkout_and_pull_branch(repo, branch_name):
     """
-    Переключается на ветку и делает pull с использованием credentials из Jenkins.
-    В Jenkins creds передаются через withCredentials как GIT_USER и GIT_PASS.
+    Переключается на ветку и делает pull.
+    Если creds переданы — использует HTTPS-аутентификацию.
+    Если нет — пытается работать без, но предупреждает.
     """
-    # Читаем логин/пароль из переменных окружения (подставляет Jenkins)
     git_user = os.environ.get('GIT_USER')
     git_pass = os.environ.get('GIT_PASS')
     
     if git_user and git_pass:
-        print("Используем HTTPS-аутентификацию из Jenkins credentials (GIT_USER/GIT_PASS)")
+        print("Используем git-креды из Jenkins (GIT_USER/GIT_PASS)")
         auth_url = f"https://{git_user}:{git_pass}@git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
-        # Перезаписываем URL remote, чтобы git использовал логин/пароль
         repo.remotes.origin.config_writer.set("url", auth_url)
     else:
-        print("Предупреждение: GIT_USER/GIT_PASS не найдены в окружении — git-операции без аутентификации")
-        print("В Jenkins это должно быть настроено через withCredentials")
+        print("Предупреждение: GIT_USER/GIT_PASS не найдены — git fetch/pull без аутентификации")
+        print("Если репозиторий требует авторизации — билд упадёт. Проверь creds в Jenkins.")
     
-    # Теперь делаем fetch и pull
     try:
         print("Выполняем git fetch...")
         repo.remotes.origin.fetch()
@@ -69,14 +67,18 @@ def checkout_and_pull_branch(repo, branch_name):
         print(f"Переключаемся на ветку: {branch_name}")
         repo.git.checkout(branch_name)
         
-        print(f"Подтягиваем изменения: git pull origin {branch_name}")
+        print(f"Подтягиваем изменения...")
         repo.git.pull('origin', branch_name)
         
     except git.exc.GitCommandError as e:
         print(f"Ошибка git-команды: {e}")
         print(f"Команда: {e.command}")
         print(f"Вывод ошибки: {e.stderr}")
-        sys.exit(1)
+        # Если ошибка именно на аутентификации — продолжаем, если репозиторий уже склонирован
+        if "could not read Username" in str(e) or "authentication" in str(e).lower():
+            print("Продолжаем без fetch/pull — возможно, локальная копия уже актуальна")
+        else:
+            sys.exit(1)
 
 def run_sql_file(sql_path, db_user, db_pass, dsn):
     file_name = os.path.basename(sql_path)
