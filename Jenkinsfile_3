@@ -38,7 +38,7 @@ pipeline {
                     branches: [[name: "${params.BRANCH_NAME}"]],
                     userRemoteConfigs: [[
                         url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
-                        credentialsId: 'git_pass'  // ← исправлено на твой актуальный ID
+                        credentialsId: 'git_pass'  // ← твой актуальный ID для Bitbucket
                     ]]
                 ])
             }
@@ -74,25 +74,27 @@ pipeline {
 
     post {
         always {
-            allure includeProperties: false,
-                   jdk: '',
-                   results: [[path: 'allure-results']]
+            // Локальный Allure-отчёт в Jenkins
+            allure([
+                includeProperties: false,
+                jdk: '',
+                properties: [],
+                reportBuildPolicy: 'ALWAYS',
+                results: [[path: 'allure-results']]
+            ])
 
+            // Загрузка в TestOps через allureTestOpsUpload (по рекомендации разработчика)
             script {
                 try {
-                    echo "Uploading results to Allure TestOps..."
-                    withAllureUpload(
-                        credentialsId: 'allure-token',
-                        name: "Duplicate Checks #${BUILD_NUMBER} | ${BRANCH_NAME}",
-                        projectId: '643',
-                        results: [[path: "${WORKSPACE}/allure-results"]],
-                        serverId: 'testops',
-                        tags: "${BRANCH_NAME}, sql-duplicates-check"
-                    ) {
-                        echo "Allure TestOps upload completed"
-                    }
+                    echo "Загружаю результаты в Allure TestOps (project 643)..."
+                    allureTestOpsUpload(
+                        allureResultsPath: 'allure-results',
+                        endpoint: 'https://testops.moscow.alfaintra.net',
+                        projectId: '643'
+                    )
+                    echo "Загрузка в TestOps завершена"
                 } catch (Exception e) {
-                    echo "Failed to upload to Allure TestOps: ${e}"
+                    echo "Не удалось загрузить в TestOps: ${e}"
                 }
             }
 
