@@ -2,13 +2,11 @@
 import os
 import sys
 import oracledb
-import keyring
 import git
 import datetime
 import requests
 import zipfile
 import argparse
-import getpass
 import time
 import warnings
 warnings.filterwarnings("ignore", category=ResourceWarning)  # убирает предупреждение WinError 6
@@ -23,34 +21,25 @@ CONFIG_FILE = "config.toml"
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         print(f"Ошибка: файл {CONFIG_FILE} не найден!")
-        print("Создай его рядом со скриптом с секцией [testops]")
+        print("Создай его рядом со скриптом с секциями [database] и [testops]")
         sys.exit(1)
     with open(CONFIG_FILE, "rb") as f:
         return tomllib.load(f)
 
 def get_db_credentials(config):
-    # Сначала берём из config.toml (для локального теста)
-    db_user = config["database"].get("db_user")
-    db_password = config["database"].get("db_password")
+    db_user = config.get("database", {}).get("db_user")
+    db_password = config.get("database", {}).get("db_password")
     
-    if db_user and db_password:
-        print("Используем логин/пароль из config.toml (локальный режим)")
-        return db_user, db_password
+    if not db_user or not db_password:
+        print("Ошибка: в config.toml в секции [database] отсутствуют db_user или db_password")
+        print("Пример:")
+        print("[database]")
+        print("db_user = \"твой_логин\"")
+        print("db_password = \"твой_пароль\"")
+        sys.exit(1)
     
-    # Если нет — fallback на keyring (для Jenkins в будущем)
-    service = config["database"]["db_service_name"]
-    user = keyring.get_password(service, "username")
-    password = keyring.get_password(service, "password")
-    
-    if not user:
-        user = input(f"Логин БД ({service}): ")
-        keyring.set_password(service, "username", user)
-    
-    if not password:
-        password = getpass.getpass(f"Пароль БД ({service}): ")
-        keyring.set_password(service, "password", password)
-    
-    return user, password
+    print("Используем логин/пароль из config.toml")
+    return db_user, db_password
 
 def checkout_and_pull_branch(repo, branch_name):
     repo.remotes.origin.fetch()
@@ -152,7 +141,7 @@ def upload_to_testops(allure_results_dir, config, skip_upload=False):
                     zipf.write(file_path, arcname)
                     print(f"  + {arcname}")
         
-        url = f"{base_url}/api/launch/upload"  # правильный эндпоинт из твоего Swagger
+        url = f"{base_url}/api/launch/upload"
         headers = {"Authorization": f"Api-Token {token}"}
         params = {"projectId": project_id}
         
@@ -168,7 +157,7 @@ def upload_to_testops(allure_results_dir, config, skip_upload=False):
                 params=params,
                 files=files,
                 timeout=120,
-                verify=False  # отключаем проверку self-signed сертификата
+                verify=False
             )
         
         response.raise_for_status()
