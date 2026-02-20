@@ -2,7 +2,6 @@ import os
 import sys
 import getpass
 import git
-import keyring
 try:
     import tomllib
 except ImportError:
@@ -17,20 +16,6 @@ def load_config():
     with open(CONFIG_FILE, "rb") as f:
         return tomllib.load(f)
 
-def get_credentials(service):
-    username = keyring.get_password(service, "username")
-    password = keyring.get_password(service, "password")
-    
-    if not username:
-        username = input(f"Логин Bitbucket ({service}): ")
-        keyring.set_password(service, "username", username)
-    
-    if not password:
-        password = getpass.getpass(f"Пароль Bitbucket ({service}): ")
-        keyring.set_password(service, "password", password)
-    
-    return username, password
-
 def generate_sql_content(schema, table_name, keys_str):
     keys_list = [k.strip() for k in keys_str.split(',')]
     group_by = ', '.join(keys_list)
@@ -41,7 +26,6 @@ SELECT {group_by}, COUNT(*) AS cnt
 FROM {schema}.{table_name}
 GROUP BY {group_by}
 HAVING COUNT(*) > 1
-ORDER BY cnt DESC
 """
     return sql.strip()
 
@@ -72,7 +56,8 @@ def main():
         if not input("\nЗапушить? [y/N]: ").lower().startswith('y'):
             return
     
-    git_user, git_pass = get_credentials(config["repository"]["git_service_name"])
+    git_user = config["repository"]["git_user"]
+    git_pass = config["repository"]["git_password"]
     
     repo_path = config["repository"]["local_path"]
     if not os.path.exists(repo_path):
