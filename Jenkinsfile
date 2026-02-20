@@ -1,4 +1,3 @@
-
 pipeline {
     agent {
         kubernetes {
@@ -58,7 +57,10 @@ pipeline {
 
         stage('Run Duplicate Checks') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'login_password_for_repo_bitbucket', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                withCredentials([
+                    usernamePassword(credentialsId: 'login_password_for_repo_bitbucket', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
+                    usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
+                ]) {
                     sh """
                         . venv/bin/activate
                         rm -rf ${ALLURE_RESULTS}
