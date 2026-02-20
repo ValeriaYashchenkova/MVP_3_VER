@@ -70,21 +70,43 @@ pipeline {
             }
         }
 
+        stage('Debug DB creds') {
+            steps {
+                container('python-builder') {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'oracle-db-creds',
+                            usernameVariable: 'DB_USER',
+                            passwordVariable: 'DB_PASS'
+                        )
+                    ]) {
+                        sh '''
+                            echo "=== DEBUG DB CREDS ==="
+                            echo "DB_USER=${DB_USER}"
+                            echo "DB_PASS=${DB_PASS:+SET}"
+                            env | grep DB
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Run SQL checks') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'oracle-db-creds',
-                        usernameVariable: 'DB_USER',
-                        passwordVariable: 'DB_PASS'
-                    )
-                ]) {
-                    sh '''
-                        echo "DB_USER detected: ${DB_USER:+YES}"
-                        echo "Starting tests..."
-
-                        venv/bin/python run_test.py --branch "${BRANCH_NAME}"
-                    '''
+                container('python-builder') {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: 'oracle-db-creds',
+                            usernameVariable: 'DB_USER',
+                            passwordVariable: 'DB_PASS'
+                        )
+                    ]) {
+                        sh '''
+                            echo "DB_USER detected: ${DB_USER:+YES}"
+                            echo "Starting tests..."
+                            venv/bin/python run_test.py --branch "${BRANCH_NAME}"
+                        '''
+                    }
                 }
             }
         }
