@@ -1,12 +1,10 @@
 import os
 import sys
 import oracledb
-import git
 import datetime
 from uuid import uuid4
 import json
 import argparse
-import urllib.parse
 import warnings
 
 warnings.filterwarnings("ignore", category=ResourceWarning)
@@ -28,90 +26,118 @@ def load_config():
         return tomllib.load(f)
 
 
-# ---------------- CREDS ----------------
-def resolve_cred(cli_val, env_name):
-    return cli_val if cli_val else os.environ.get(env_name)
-
-
-def get_db_credentials(args):
-    db_user = resolve_cred(args.db_user, "DB_USER")
-    db_pass = resolve_cred(args.db_pass, "DB_PASS")
+# ---------------- DB CREDS ----------------
+def get_db_credentials():
+    db_user = os.environ.get('DB_USER')
+    db_pass = os.environ.get('DB_PASS')
 
     if not db_user or not db_pass:
-        print("Ошибка: DB_USER или DB_PASS не переданы")
+        print("Ошибка: DB_USER или DB_PASS не установлены в окружении Jenkins")
         sys.exit(1)
 
-    print("✔ DB креды получены")
+    print("✔ DB креды получены из Jenkins")
     return db_user, db_pass
 
 
-def get_git_credentials(args):
-    git_user = resolve_cred(args.git_user, "GIT_USER")
-    git_pass = resolve_cred(args.git_pass, "GIT_PASS")
-
-    if not git_user or not git_pass:
-        print("Ошибка: GIT_USER или GIT_PASS не переданы")
-        sys.exit(1)
-
-    print("✔ Git креды получены")
-    return git_user, git_pass
-
-
-# ---------------- GIT ----------------
-def checkout_and_pull_branch(repo, branch_name, git_user, git_pass):
-    git_user = urllib.parse.quote(git_user)
-    git_pass = urllib.parse.quote(git_pass)
-
-    auth_url = f"https://{git_user}:{git_pass}@git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
-
-    repo.remotes.origin.set_url(auth_url)
+# ---------------- SQL RUN ----------------
+def run_sql_file(sql_path, db_user, db_pass, dsn):
+    file_name = os.path.basename(sql_path)
+    status = "passed"
+    message = "OK — дубликатов не найдено"
+    details = ""
 
     try:
-        print("git fetch...")
-        repo.remotes.origin.fetch(prune=True)
+        conn = oracledb.connect(user=db_user, password=db_pass, dsn=dsn)
+        cursor = conn.cursor()
 
-        remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
+        sql = open(sql_path, 'r', encoding='utf-8').read().rstrip(' \n;')
+        cursor.execute(sql)
+        rows = cursor.fetchall()
 
-        if branch_name not in remote_branches:
-            print(f"Ветка '{branch_name}' не найдена")
-            print("Доступные:", ", ".join(sorted(remote_branches)) or "— пусто —")
-            sys.exit(1)
+        if rows:
+            status = "failed"
+            message = f"Найдено {len(rows)} наборов дубликатов"
+            details = "\n".join(str(row) for row in rows)
 
-        print(f"checkout {branch_name}")
-        repo.git.checkout(branch_name)
-        repo.git.pull('origin', branch_name)
+        conn.close()
 
-    except git.exc.GitCommandError as e:
-        print("Git ошибка:")
-        print(e.stderr)
-        sys.exit(1)
+    except oracledb.Error as e:
+        status = "broken"
+        message = "Ошибка выполнения"
+        details = str(e)
+
+    return status, message, details, file_name
+
+
+# ---------------- ALLURE ----------------
+def create_allure_results(results, branch_name):
+    allure_dir = "allure-results"
+    os.makedirs(allure_dir, exist_ok=True)
+
+    for r in results:
+        test_uuid = str(uuid4())
+        test_file = os.path.join(allure_dir, f"{test_uuid}-result.json")
+
+        status_map = {"passed": "passed", "failed": "failed", "broken": "broken"}
+
+        attachments = []
+        if r["details"]:
+            attach_filename = f"{test_uuid}-details.txt"
+            attach_path = os.path.join(allure_dir, attach_filename)
+            with open(attach_path, 'w', encoding='utf-8') as f:
+                f.write(r["details"])
+            attachments = [{"name": "Детали", "source": attach_filename, "type": "text/plain"}]
+
+        with open(test_file, 'w', encoding='utf-8') as f:
+            json.dump({
+                "name": r["file"],
+                "description": r["message"],
+                "status": status_map.get(r["status"], "broken"),
+                "labels": [{"name": "branch", "value": branch_name}],
+                "uuid": test_uuid,
+                "start": int(datetime.datetime.now().timestamp() * 1000),
+                "stop": int(datetime.datetime.now().timestamp() * 1000)
+            }, f, ensure_ascii=False)
 
 
 # ---------------- MAIN ----------------
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Запуск SQL проверок")
     parser.add_argument('--branch', required=True)
-    parser.add_argument('--git-user')
-    parser.add_argument('--git-pass')
-    parser.add_argument('--db-user')
-    parser.add_argument('--db-pass')
     args = parser.parse_args()
 
+    print(f"Jenkins checkout ветки: {args.branch}")
+
     config = load_config()
-    repo = git.Repo(".")
+    repo_path = "."
 
-    git_user, git_pass = get_git_credentials(args)
-    checkout_and_pull_branch(repo, args.branch, git_user, git_pass)
+    tests_dir = os.path.join(repo_path, config["tests"]["tests_directory"])
 
-    db_user, db_pass = get_db_credentials(args)
+    if not os.path.exists(tests_dir):
+        print("Папка с SQL тестами не найдена:", tests_dir)
+        sys.exit(1)
+
+    sql_files = [f for f in os.listdir(tests_dir) if f.endswith('.sql')]
+
+    if not sql_files:
+        print("SQL-скрипты не найдены")
+        sys.exit(1)
+
+    db_user, db_pass = get_db_credentials()
     dsn = config["database"]["default_dsn"]
 
-    print("Подключение к Oracle...")
-    conn = oracledb.connect(user=db_user, password=db_pass, dsn=dsn)
-    print("✔ Oracle OK")
-    conn.close()
+    results = []
 
-    print("Готово!")
+    print("\nВыполняю проверки...")
+    for sql_file in sql_files:
+        sql_path = os.path.join(tests_dir, sql_file)
+        print(f"→ {sql_file}")
+        status, message, details, fname = run_sql_file(sql_path, db_user, db_pass, dsn)
+        results.append({"status": status, "message": message, "details": details, "file": fname})
+
+    create_allure_results(results, args.branch)
+
+    print("\nГотово! Allure results сформированы.")
 
 
 if __name__ == "__main__":
