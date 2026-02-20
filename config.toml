@@ -7,6 +7,8 @@ git_service_name = "bitbucket_auto_tests"
 [database]
 default_dsn = "BIDBTST1:1521/DB12TST2"
 db_service_name = "oracle_db_tests"
+db_user = "твой_логин_от_базы"          # ← замени на реальный логин
+db_password = "твой_пароль_от_базы"      # ← замени на реальный пароль
 
 [tests]
 tests_directory = "tests"
