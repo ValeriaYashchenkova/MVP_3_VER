@@ -18,13 +18,16 @@ pipeline {
         string(
             name: 'BRANCH_NAME',
             defaultValue: 'master',
-            description: 'Ветка для проверки дубликатов'
+            description: 'Ветка для проверки дубликатов (например feature/duplicates-test)'
         )
     }
 
     environment {
         PATH = "/var/lib/jenkins/.local/bin:$PATH"
         ALLURE_RESULTS = "allure-results"
+        TESTOPS_ENDPOINT = 'https://testops.moscow.alfaintra.net'
+        TESTOPS_PROJECT_ID = '643'
+        TESTOPS_SERVER_ID = 'testops'
     }
 
     stages {
@@ -35,7 +38,7 @@ pipeline {
                     branches: [[name: "${params.BRANCH_NAME}"]],
                     userRemoteConfigs: [[
                         url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
-                        credentialsId: 'login_password_for_repo_bitbucket'
+                        credentialsId: 'git_pass'  // ← исправлено на твой актуальный ID
                     ]]
                 ])
             }
@@ -55,7 +58,7 @@ pipeline {
         stage('Run Duplicate Checks') {
             steps {
                 withCredentials([
-                    usernamePassword(credentialsId: 'login_password_for_repo_bitbucket', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
+                    usernamePassword(credentialsId: 'git_pass', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS'),
                     usernamePassword(credentialsId: 'oracle-db-creds', usernameVariable: 'DB_USER', passwordVariable: 'DB_PASS')
                 ]) {
                     sh """
