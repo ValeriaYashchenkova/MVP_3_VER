@@ -44,9 +44,13 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+       stage('Install Dependencies') {
     steps {
         sh '''
+            # Устанавливаем python3-venv, если его нет (для Debian/Ubuntu-based образов)
+            apt-get update && apt-get install -y python3-venv || true
+            
+            # Определяем, какая команда python доступна
             if command -v python3 &> /dev/null; then
                 PYTHON_CMD=python3
             elif command -v python &> /dev/null; then
