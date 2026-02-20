@@ -7,12 +7,11 @@ pipeline {
     }
 
     triggers {
-        pollSCM('')  // автоматический запуск при изменениях в репозитории
+        pollSCM('')  // следит за изменениями в репозитории
     }
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '20'))
-        timeout(time: 30, unit: 'MINUTES')
     }
 
     parameters {
@@ -70,17 +69,19 @@ pipeline {
 
     post {
         always {
+            // 1. Локальный Allure-отчёт в Jenkins
             allure([
                 includeProperties: false,
                 reportBuildPolicy: 'ALWAYS',
                 results: [[path: "${ALLURE_RESULTS}"]]
             ])
 
+            // 2. Загрузка в Allure TestOps — исправленный шаг разработчика
             script {
                 try {
                     echo "Uploading results to Allure TestOps (project 643)..."
                     withAllureUpload(
-                        credentialsId: 'testops-token',
+                        credentialsId: 'allure-token',
                         name: "Duplicate Checks #${BUILD_NUMBER} | ${BRANCH_NAME}",
                         projectId: '643',
                         results: [[path: "${WORKSPACE}/allure-results"]],
@@ -91,6 +92,7 @@ pipeline {
                     }
                 } catch (Exception e) {
                     echo "Failed to upload to Allure TestOps: ${e}"
+                    // Билд НЕ падает, если TestOps недоступен
                 }
             }
 
