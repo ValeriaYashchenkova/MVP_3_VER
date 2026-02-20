@@ -1,3 +1,4 @@
+
 pipeline {
     agent {
         kubernetes {
@@ -7,7 +8,7 @@ pipeline {
     }
 
     triggers {
-        pollSCM('')  // запуск при изменениях в репозитории
+        pollSCM('')
     }
 
     options {
@@ -33,47 +34,51 @@ pipeline {
     stages {
         stage('Checkout SCM') {
             steps {
-                git branch: "${params.BRANCH_NAME}",
-                    url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
-                    credentialsId: 'login_password_for_repo_bitbucket'
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: "${params.BRANCH_NAME}"]],
+                    userRemoteConfigs: [[
+                        url: 'https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git',
+                        credentialsId: 'login_password_for_repo_bitbucket'
+                    ]]
+                ])
             }
         }
 
         stage('Create venv & Install dependencies') {
-    steps {
-        sh """
-            python3.7 -m venv venv || true
-            . venv/bin/activate
-            pip3.7 install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
-            pip3.7 install oracledb gitpython requests tomli keyring -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
-        """
-    }
-}
+            steps {
+                sh """
+                    python3.7 -m venv venv || true
+                    . venv/bin/activate
+                    pip3.7 install --upgrade pip -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+                    pip3.7 install oracledb gitpython requests tomli -i https://binary.alfabank.ru/artifactory/api/pypi/pipy-virtual/simple
+                """
+            }
+        }
 
         stage('Run Duplicate Checks') {
-    steps {
-        withCredentials([usernamePassword(credentialsId: 'login_password_for_repo_bitbucket', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
-            sh """
-                . venv/bin/activate
-                rm -rf ${ALLURE_RESULTS}
-                mkdir -p ${ALLURE_RESULTS}
-                python run_test.py --branch ${BRANCH_NAME}
-            """
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'login_password_for_repo_bitbucket', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASS')]) {
+                    sh """
+                        . venv/bin/activate
+                        rm -rf ${ALLURE_RESULTS}
+                        mkdir -p ${ALLURE_RESULTS}
+                        python run_test.py --branch ${BRANCH_NAME}
+                    """
+                }
+            }
         }
     }
-}
 
     post {
         always {
-            // Локальный Allure-отчёт в Jenkins
             allure includeProperties: false,
                    jdk: '',
                    results: [[path: 'allure-results']]
 
-            // Загрузка в Allure TestOps — твой шаг разработчика
             script {
                 try {
-                    echo "Uploading results to Allure TestOps (project 643)..."
+                    echo "Uploading results to Allure TestOps..."
                     withAllureUpload(
                         credentialsId: 'allure-token',
                         name: "Duplicate Checks #${BUILD_NUMBER} | ${BRANCH_NAME}",
@@ -86,7 +91,6 @@ pipeline {
                     }
                 } catch (Exception e) {
                     echo "Failed to upload to Allure TestOps: ${e}"
-                    // Не падаем билд, если TestOps недоступен
                 }
             }
 
