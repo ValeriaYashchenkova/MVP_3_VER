@@ -1,14 +1,14 @@
 [repository]
 url = "https://git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
-local_path = "./bialm_ft_auto"
+local_path = "."  # в Jenkins — корень workspace, локально — корень проекта
 default_branch = "master"
-git_service_name = "bitbucket_auto_tests"
+git_user = "твой_логин_от_битбакета"      # ← замени на свой
+git_password = "твой_пароль_от_битбакета"  # ← замени на свой
 
 [database]
 default_dsn = "BIDBTST1:1521/DB12TST2"
-db_service_name = "oracle_db_tests"
-db_user = "твой_логин_от_базы"          # ← замени на реальный логин
-db_password = "твой_пароль_от_базы"      # ← замени на реальный пароль
+db_user = "твой_логин_от_базы"            # ← замени
+db_password = "твой_пароль_от_базы"       # ← замени
 
 [tests]
 tests_directory = "tests"
@@ -19,5 +19,6 @@ auto_stash = true
 confirm_before_push = true
 
 [testops]
-project_id = "643"
 url = "https://testops.moscow.alfaintra.net"
+project_id = "643"
+launch_token = "0d4304a3-92d6-4d7a-99ac-69a41c52af7f"  # твой токен
