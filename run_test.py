@@ -37,18 +37,46 @@ def get_db_credentials(config):
     return db_user, db_password
 
 def checkout_and_pull_branch(repo, branch_name):
-    repo.remotes.origin.fetch()
-    remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
+    """
+    Переключается на ветку и делает pull с использованием credentials из Jenkins.
+    В Jenkins creds передаются через withCredentials как GIT_USER и GIT_PASS.
+    """
+    # Читаем логин/пароль из переменных окружения (подставляет Jenkins)
+    git_user = os.environ.get('GIT_USER')
+    git_pass = os.environ.get('GIT_PASS')
     
-    if branch_name not in remote_branches:
-        print(f"Ветка '{branch_name}' не найдена")
-        print("Доступные:", ", ".join(sorted(remote_branches)) or "— пусто —")
+    if git_user and git_pass:
+        print("Используем HTTPS-аутентификацию из Jenkins credentials (GIT_USER/GIT_PASS)")
+        auth_url = f"https://{git_user}:{git_pass}@git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
+        # Перезаписываем URL remote, чтобы git использовал логин/пароль
+        repo.remotes.origin.config_writer.set("url", auth_url)
+    else:
+        print("Предупреждение: GIT_USER/GIT_PASS не найдены в окружении — git-операции без аутентификации")
+        print("В Jenkins это должно быть настроено через withCredentials")
+    
+    # Теперь делаем fetch и pull
+    try:
+        print("Выполняем git fetch...")
+        repo.remotes.origin.fetch()
+        
+        remote_branches = {ref.name.split('/')[-1] for ref in repo.remotes.origin.refs}
+        
+        if branch_name not in remote_branches:
+            print(f"Ветка '{branch_name}' не найдена в удалённом репозитории")
+            print("Доступные ветки:", ", ".join(sorted(remote_branches)) if remote_branches else "— пусто —")
+            sys.exit(1)
+        
+        print(f"Переключаемся на ветку: {branch_name}")
+        repo.git.checkout(branch_name)
+        
+        print(f"Подтягиваем изменения: git pull origin {branch_name}")
+        repo.git.pull('origin', branch_name)
+        
+    except git.exc.GitCommandError as e:
+        print(f"Ошибка git-команды: {e}")
+        print(f"Команда: {e.command}")
+        print(f"Вывод ошибки: {e.stderr}")
         sys.exit(1)
-    
-    print(f"Переключаемся на ветку: {branch_name}")
-    repo.git.checkout(branch_name)
-    print(f"Подтягиваем изменения...")
-    repo.git.pull('origin', branch_name)
 
 def run_sql_file(sql_path, db_user, db_pass, dsn):
     file_name = os.path.basename(sql_path)
