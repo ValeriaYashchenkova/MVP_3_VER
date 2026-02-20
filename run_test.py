@@ -33,20 +33,15 @@ def get_db_credentials(config):
     
     if not db_user or not db_password:
         print("Ошибка: в config.toml отсутствуют db_user или db_password")
-        print("Пример:")
-        print("[database]")
-        print("db_user = \"твой_логин\"")
-        print("db_password = \"твой_пароль\"")
         sys.exit(1)
     
     print("Логин/пароль к БД взяты из config.toml")
     return db_user, db_password
 
-def checkout_and_pull_branch(repo, branch_name):
+def checkout_and_pull_branch(repo, branch_name, config):
     """
     Переключается на ветку и делает pull с использованием логина/пароля из config.toml
     """
-    # Читаем логин/пароль к Bitbucket из конфига
     git_user = config["repository"].get("git_user")
     git_pass = config["repository"].get("git_password")
     
@@ -60,10 +55,8 @@ def checkout_and_pull_branch(repo, branch_name):
     
     print("Используем логин/пароль к Bitbucket из config.toml")
     
-    # Формируем URL с аутентификацией
     auth_url = f"https://{git_user}:{git_pass}@git.moscow.alfaintra.net/scm/bialm_ft/bialm_ft_auto.git"
     
-    # Перезаписываем URL remote
     repo.remotes.origin.config_writer.set("url", auth_url)
     
     try:
@@ -241,7 +234,7 @@ def main():
     repo = git.Repo(repo_path)
     
     branch_name = args.branch
-    checkout_and_pull_branch(repo, branch_name)
+    checkout_and_pull_branch(repo, branch_name, config)  # ← передаём config
     
     tests_dir = os.path.join(repo_path, config["tests"]["tests_directory"])
     sql_files = [f for f in os.listdir(tests_dir) if f.endswith('.sql')]
