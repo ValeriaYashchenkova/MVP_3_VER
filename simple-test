@@ -1,0 +1,58 @@
+import allure
+import pytest
+from time import sleep
+
+
+@allure.title("Проверка успешного сложения двух чисел")
+@allure.description("Простой позитивный тест: 5 + 7 должно быть 12")
+@allure.severity(allure.severity_level.NORMAL)
+@allure.tag("smoke", "math", "positive")
+@allure.label("owner", "Тестер_Вася")
+def test_addition_positive():
+    a = 5
+    b = 7
+    result = a + b
+    
+    with allure.step("Складываем два числа"):
+        assert result == 12, f"Ожидали 12, получили {result}"
+
+
+@allure.title("Проверка деления на ноль")
+@allure.description("Ожидаем, что при делении на 0 будет выброшено исключение")
+@allure.severity(allure.severity_level.CRITICAL)
+@allure.tag("negative", "exception")
+def test_division_by_zero():
+    with allure.step("Пытаемся делить на ноль"):
+        with pytest.raises(ZeroDivisionError) as exc:
+            100 / 0
+        
+    with allure.step("Проверяем текст ошибки"):
+        assert "division by zero" in str(exc.value)
+
+
+@allure.title("Проверка строки с русскими символами")
+@allure.description_html("""
+<ul>
+    <li>Проверяем работу с юникодом</li>
+    <li>Кириллица должна отображаться корректно</li>
+</ul>
+""")
+@allure.severity(allure.severity_level.MINOR)
+@pytest.mark.parametrize("word, expected_length", [
+    ("привет", 6),
+    ("тестопс", 7),
+    ("аллюр", 5),
+])
+def test_russian_words_length(word, expected_length):
+    with allure.step(f"Проверяем длину слова '{word}'"):
+        assert len(word) == expected_length
+
+
+@allure.title("Тест со скриншотом при падении (пример)")
+@allure.severity(allure.severity_level.BLOCKER)
+def test_should_fail_and_show_screenshot_example():
+    allure.attach("Это просто текстовая заметка", name="Заметка", attachment_type=allure.attachment_type.TEXT)
+    
+    sleep(0.5)  # для красоты в отчёте
+    
+    assert 42 == 43, "Специально падаем, чтобы увидеть как выглядит failed-тест"
