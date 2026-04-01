@@ -51,3 +51,22 @@ select * from wf_control.md_workflow2reg
 where reg_name = 'WF_REG_DMALM_REGULAR_DAY_NBALANCE'
 
 select * from wf_control.md_workflow2reg
+
+
+
+
+Витрина,Объект (Таблица),Регламент (Workflow),Приоритет,Описание
+СТЦ,DWH4DM.FTP_SSTAT,WF_REG_DWH4DM_REGULAR_FTP,Высокий,Ставка фондирования
+СТЦ,DWH4DM.ACCTDEALBALANCE_FTP_SSTAT,WF_REG_DWH4DM_REGULAR_FTP,Высокий,"Остатки по счету и сделке, обогащенные атрибутами для расчета СТЦ"
+СТЦ,DWH4DM.ADJUSTMENTPL_STRAN,WF_REG_DWH4DM_RELOAD_REFUND_ADJ,Средний,PNL! Обороты за период (ручные корректировки)
+СТЦ,DWH4DM.IFRSREFUND_SAGG,WF_REG_DWH4DM_REGULAR_M_IFRSREFUND_SAGG,Средний,Агрегат по расчету компенсаций (месячные компенсы)
+ALM,DMALM.REP6406U_0409136_DETAIL_SSTAT,WF_REG_DMALM_REGULAR_WORKDAY_6406U_0409136,Высокий,Детальные данные по маркировке ДС в части ННКЛ (NLCR)
+ALM,DMALM.REP6406U_0409121_SSTAT,WF_REG_DMALM_REGULAR_WORKDAY_6406U,Высокий,НЧСФ (0409121)
+ALM,DMALM.REP6406U_0409122_SSTAT,WF_REG_DMALM_REGULAR_WORKDAY_6406U,Высокий,ПКЛ (0409122)
+ALM,DMALM.DEAL_FIRSTSTATE_SDIM,WF_REG_DMALM_REGULAR_PORTFOLIO,Высокий,Таблица по сделкам. Факт заключения сделки на продукте (Т-1 ТРП)
+ALM,DMALM.EVENTS_JOURNAL_SSTAT,WF_REG_DMALM_REGULAR_PORTFOLIO,Высокий,Журнал событий по сделке (Т-1 ТРП)
+ALM,DMALM.BALANCEPORTFOLIO_SSTAT,WF_REG_DMALM_REGULAR_DAY_NBALANCE,Средний,Управленческие остатки по портфелю (балансы ALM)
+Факторинг,FACTORINGSHOW_SHIST,WF_REG_DWH4DM_REGULAR_FTP_FACTORING,Средний,Факторинг (одна таблица)
+Портфель,FTPLOANPORTFOLIO_SDIM,WF_REG_DWH4DM_REGULAR_FTP_PORTFOLIO,Средний,Портфель по ипотеке/КН/КПЗН/авто
+ALM (журнал),DMDATAREADINESSLOG,— (журнал готовности витрины),Высокий,Журнал готовности витрины ALM (всё или ничего) — Ермас
+ALM (журнал),READYDATALOG,— (журнал готовности витрины),Высокий,Журнал готовности витрины ALM (множество витрин)
