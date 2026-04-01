@@ -1,0 +1,53 @@
+--основные
+Витрина СТЦ:
+WF_REG_DWH4DM_REGULAR_FTP --Инкрементальный регламент загрузки витрины СТЦ
+    Конечные таблицы:
+             0) DWH4DM.FTP_SSTAT -- Ставка фондирования
+             1) DWH4DM.ACCTDEALBALANCE_FTP_SSTAT -- Остатки по счету и сделке обогащенные атрибутами для расчета СТЦ
+             --Количество строк и сумма баланса в обеих таблицах
+             --+проверки от БС
+
+WF_REG_DWH4DM_REGULAR_M_IFRSREFUND_SAGG --месячные компенсы
+WF_REG_DWH4DM_RELOAD_REFUND_ADJ --ручные
+    Конечные таблицы:
+             0) DWH4DM.ADJUSTMENTPL_STRAN -- PNL! Обороты за период
+             1) DWH4DM.IFRSREFUND_SAGG -- Агрегат по расчету компенсаций
+
+Витрина ALM:
+WF_REG_DMALM_REGULAR_DAY --основной ALM
+--Ермас
+DMDATAREADINESSLOG -- журнал готовности всей витрины, либо всё либо ничего
+
+WF_REG_DMALM_REGULAR_WORKDAY_6406U_0409136 -- ННКЛ
+DMALM.REP6406U_0409136_DETAIL_SSTAT --Детальные данные по маркировке ДС в части ННКЛ (NLCR) для формы, используется для записи результата классификации в связанных.
+
+WF_REG_DMALM_REGULAR_WORKDAY_6406U --НЧСФ и ПКЛ(0409121 и 0409122)
+DMALM.REP6406U_0409121_SSTAT -- НЧСФ
+DMALM.REP6406U_0409122_SSTAT -- ПКЛ
+
+WF_REG_DMALM_REGULAR_WORKDAY_TRP -- Т-2 ТРП
+--Журнал готовности. Множество витрин конечных
+READYDATALOG -- журнал готовности всей витрины, либо всё либо ничего
+
+WF_REG_DMALM_REGULAR_PORTFOLIO --Т-1 ТРП
+DMALM.DEAL_FIRSTSTATE_SDIM --Таблица по сделкам. Факт заключение сделки на продукте
+DMALM.EVENTS_JOURNAL_SSTAT --Журнал событий по сделке
+
+
+
+--доп
+WF_REG_DWH4DM_REGULAR_FTP_FACTORING
+--Факторинг, регламент одной таблицы FACTORINGSHOW_SHIST
+WF_REG_DWH4DM_REGULAR_FTP_PORTFOLIO
+--Портфель по ипотеке/кн/кпзн/авто, регламент одной таблицы FTPLOANPORTFOLIO_SDIM
+WF_REG_DMALM_REGULAR_DAY_NBALANCE--балансы ALM
+--DMALM.BALANCEPORTFOLIO_SSTAT. Таблица с управленческими остатками в разрезе дня/статьи управленческого учета/счета 2-го порядка, валюты и бизнес-блока для последующего анализ структуры баланса и маржи по банковским продуктам
+
+select * from wf_control.log_loading 
+where reg_name = 'WF_REG_DMALM_REGULAR_WORKDAY_6406U_0409136'
+order by loading_id desc
+
+select * from wf_control.md_workflow2reg 
+where reg_name = 'WF_REG_DMALM_REGULAR_DAY_NBALANCE'
+
+select * from wf_control.md_workflow2reg
