@@ -69,3 +69,212 @@ INSERT INTO dwh.FUNDINGRATE_VHIST (
     0.0                                      -- ADDITION_RATE (надбавка)
 );
 COMMIT;
+
+-- -----------------------------------------------------------------------------------
+-- Кейс 9 (Позитивный): Чистая платформа TRF
+-- -----------------------------------------------------------------------------------
+INSERT INTO dwh.FUNDINGRATES_VHIST (
+    XK, FUNDINGKEYS_UK, PREVID_CCODE, FUNDINGRATETYPE_UK, EFFECTIVE_FROM, EFFECTIVE_TO, 
+    UUID_CCODE, CURRENCY_UK, FTP_RATE, FUNDINGBASISINDICATOR_UK, STARTDEAL_DATE, ENDDEAL_DATE, 
+    DELETED_FLAG, DWSCMIX, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, VALIDFROM, VALIDTO, 
+    FTP_WO_FOR_RATE, VERSION_VALUE, REQUIRED_RESERVE_FACTOR
+) VALUES (
+    41000002,                                 -- XK
+    41066001,                                 -- FUNDINGKEYS_UK
+    'PREV',                                   -- PREVID_CCODE
+    1,                                        -- FUNDINGRATETYPE_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- EFFECTIVE_FROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- EFFECTIVE_TO
+    'UUID_41000002',                          -- UUID_CCODE (Уникальный код)
+    810,                                      -- CURRENCY_UK
+    7.2,                                      -- FTP_RATE
+    1,                                        -- FUNDINGBASISINDICATOR_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- STARTDEAL_DATE
+    TO_DATE('20270501', 'YYYYMMDD'),          -- ENDDEAL_DATE
+    'N',                                      -- DELETED_FLAG
+    '0',                                      -- DWSCMIX (Техническая заглушка)
+    TO_DATE('20260528', 'YYYYMMDD'),          -- AS_OF_DAY
+    41000,                                    -- JOB_INSERT
+    41001,                                    -- JOB_UPDATE
+    TO_DATE('20260506', 'YYYYMMDD'),          -- VALIDFROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- VALIDTO
+    7.5,                                      -- FTP_WO_FOR_RATE
+    1,                                        -- VERSION_VALUE (Заглушка версии записи)
+    0.1                                       -- REQUIRED_RESERVE_FACTOR
+);
+COMMIT;
+
+
+-- -----------------------------------------------------------------------------------
+-- Кейс 12 (Негативный): Фактор резервирования равен 0.0
+-- -----------------------------------------------------------------------------------
+INSERT INTO dwh.FUNDINGRATES_VHIST (
+    XK, FUNDINGKEYS_UK, PREVID_CCODE, FUNDINGRATETYPE_UK, EFFECTIVE_FROM, EFFECTIVE_TO, 
+    UUID_CCODE, CURRENCY_UK, FTP_RATE, FUNDINGBASISINDICATOR_UK, STARTDEAL_DATE, ENDDEAL_DATE, 
+    DELETED_FLAG, DWSCMIX, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, VALIDFROM, VALIDTO, 
+    FTP_WO_FOR_RATE, VERSION_VALUE, REQUIRED_RESERVE_FACTOR
+) VALUES (
+    41000003,                                 -- XK
+    41066012,                                 -- FUNDINGKEYS_UK
+    'PREV',                                   -- PREVID_CCODE
+    1,                                        -- FUNDINGRATETYPE_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- EFFECTIVE_FROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- EFFECTIVE_TO
+    'UUID_41000003',                          -- UUID_CCODE
+    810,                                      -- CURRENCY_UK
+    6.0,                                      -- FTP_RATE
+    1,                                        -- FUNDINGBASISINDICATOR_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- STARTDEAL_DATE
+    TO_DATE('20270501', 'YYYYMMDD'),          -- ENDDEAL_DATE
+    'N',                                      -- DELETED_FLAG
+    '0',                                      -- DWSCMIX
+    TO_DATE('20260528', 'YYYYMMDD'),          -- AS_OF_DAY
+    41000,                                    -- JOB_INSERT
+    41001,                                    -- JOB_UPDATE
+    TO_DATE('20260506', 'YYYYMMDD'),          -- VALIDFROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- VALIDTO
+    6.5,                                      -- FTP_WO_FOR_RATE
+    1,                                        -- VERSION_VALUE
+    0.0                                       -- REQUIRED_RESERVE_FACTOR (Баг-сценарий)
+);
+COMMIT;
+
+-- -----------------------------------------------------------------------------------
+-- Вставка ключей фондирования в справочник FUNDINGKEYS_HDIM
+-- -----------------------------------------------------------------------------------
+INSERT INTO dwh.FUNDINGKEYS_HDIM (
+    UK, CCODE, DEAL_UK, ASSETFUNDALGORITHMS_UK, ASSETFUNDGROUPS_UK, 
+    GL2ACCOUNT_UK, ACCOUNT_UK, DEAL_TRANCHE_UK, DELETED_FLAG, DEFAULT_FLAG, 
+    DWSCMIX, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, VALIDFROM, VALIDTO
+) VALUES (
+    41066001,                                 -- UK
+    'CC',                                     -- CCODE
+    41000409,                                 -- DEAL_UK
+    104,                                      -- ASSETFUNDALGORITHMS_UK
+    1589472093789,                            -- ASSETFUNDGROUPS_UK
+    415,                                      -- GL2ACCOUNT_UK
+    41000409,                                 -- ACCOUNT_UK
+    -1,                                       -- DEAL_TRANCHE_UK 
+    'N',                                      -- DELETED_FLAG
+    'N',                                      -- DEFAULT_FLAG
+    '0',                                      -- DWSCMIX 
+    TO_DATE('20260528', 'YYYYMMDD'),          -- AS_OF_DAY
+    41000,                                    -- JOB_INSERT
+    41001,                                    -- JOB_UPDATE
+    TO_DATE('20260506', 'YYYYMMDD'),          -- VALIDFROM
+    TO_DATE('59991231', 'YYYYMMDD')           -- VALIDTO
+);
+COMMIT;
+
+-- Кейс 12 (Негативный): Фактор резервирования равен 0.0
+INSERT INTO dwh.FUNDINGRATES_VHIST (
+    XK, 
+    FUNDINGKEYS_UK, 
+    PREVID_CCODE, 
+    FUNDINGRATETYPE_UK, 
+    EFFECTIVE_FROM, 
+    EFFECTIVE_TO, 
+    UUID_CCODE, 
+    CURRENCY_UK, 
+    FTP_RATE, 
+    FUNDINGBASISINDICATOR_UK, 
+    STARTDEAL_DATE, 
+    ENDDEAL_DATE, 
+    DELETED_FLAG, 
+    DWSCMIX, 
+    AS_OF_DAY, 
+    JOB_INSERT, 
+    JOB_UPDATE, 
+    VALIDFROM, 
+    VALIDTO, 
+    FTP_WO_FOR_RATE, 
+    VERSION_VALUE, 
+    REQUIRED_RESERVE_FACTOR
+) VALUES (
+    41000003,                                 -- XK
+    41066012,                                 -- FUNDINGKEYS_UK
+    'PREV',                                   -- PREVID_CCODE
+    1,                                        -- FUNDINGRATETYPE_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- EFFECTIVE_FROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- EFFECTIVE_TO
+    'UUID_41000003',                          -- UUID_CCODE (Добавлено)
+    810,                                      -- CURRENCY_UK
+    6.0,                                      -- FTP_RATE
+    1,                                        -- FUNDINGBASISINDICATOR_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- STARTDEAL_DATE
+    TO_DATE('20270501', 'YYYYMMDD'),          -- ENDDEAL_DATE
+    'N',                                      -- DELETED_FLAG
+    '0',                                      -- DWSCMIX (Добавлено)
+    TO_DATE('20260528', 'YYYYMMDD'),          -- AS_OF_DAY
+    41000,                                    -- JOB_INSERT
+    41001,                                    -- JOB_UPDATE
+    TO_DATE('20260506', 'YYYYMMDD'),          -- VALIDFROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- VALIDTO
+    6.5,                                      -- FTP_WO_FOR_RATE
+    1,                                        -- VERSION_VALUE (Добавлено)
+    0.0                                       -- REQUIRED_RESERVE_FACTOR
+);
+COMMIT;
+
+
+-- -----------------------------------------------------------------------------------
+-- Позитивный мэтчинг row_number() на Шаге 4
+-- -----------------------------------------------------------------------------------
+INSERT INTO dwh.DEAL2FUNDINGBID_VHIST (
+    XK, 
+    FUNDINGBID_UK, 
+    DEAL_UK, 
+    EFFECTIVE_FROM, 
+    EFFECTIVE_TO, 
+    DWSCMIX, 
+    VALIDFROM, 
+    VALIDTO, 
+    JOB_INSERT, 
+    DELETED_FLAG, 
+    AS_OF_DAY, 
+    JOB_UPDATE, 
+    DEAL2FUNDINGBIDTYPE_UK
+) VALUES (
+    41000004,                                 -- XK
+    41090151,                                 -- FUNDINGBID_UK
+    41000515,                                 -- DEAL_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- EFFECTIVE_FROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- EFFECTIVE_TO
+    '0',                                      -- DWSCMIX 
+    TO_DATE('20260506', 'YYYYMMDD'),          -- VALIDFROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- VALIDTO
+    41000,                                    -- JOB_INSERT
+    'N',                                      -- DELETED_FLAG
+    TO_DATE('20260528', 'YYYYMMDD'),          -- AS_OF_DAY
+    41001,                                    -- JOB_UPDATE
+    1                                         -- DEAL2FUNDINGBIDTYPE_UK
+);
+COMMIT;
+
+
+
+-- -----------------------------------------------------------------------------------
+-- Кейс 37 и 38: Моделируем сделку (Ключи сдвинуты в тестовый диапазон 66666... для обхода ORA-00001)
+-- -----------------------------------------------------------------------------------
+
+-- 1. Вставка в витрину СТЦ с ключом 66666037
+INSERT INTO DWH4DM.FTPRATE_TEMP_SSTAT (
+    VALUE_DAY, ACCOUNT_UK, DEAL_UK, FTPALGORITHM_UK, FTP_RATE, COMP_DAY, TENOR_NCODE,
+    EFFECTIVE_FROM, EFFECTIVE_TO, STANDARDFTP_RATE, SLP_RATE, FTPFOR_RATE, BAL2USD4COMP_DATE,
+    DELETED_FLAG, AS_OF_DAY, PARTITION_NUMBER, JOB_INSERT, JOB_UPDATE, FTP_PRIORITY, FUNDINGKEYS_UK, DESCRIPTION
+) VALUES (
+    TO_DATE('20260528', 'YYYYMMDD'), 66666037, 66666037, 130, 0.075, TO_DATE('20260528', 'YYYYMMDD'), 90,
+    TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 0.07, 0.005, 0.075, TO_DATE('20260528', 'YYYYMMDD'),
+    'N', TO_DATE('20260528', 'YYYYMMDD'), 7, 41000, 41001, 3, NULL, 'QA41_YASHENKOVA_CASE_37_ORPHAN_DEAL'
+);
+COMMIT;
+
+-- 2. Вставка балансов с ТЕМ ЖЕ ключом 66666037, чтобы отработал JOIN
+INSERT INTO DWH4DM.ACCTDEALBALANCE_FTP_SSTAT (
+    VALUE_DAY, ACCOUNT_UK, DEAL_UK, FTPALGORITHM_UK, DEALTABLE_UK, GL2ACCOUNT_NCODE,
+    START_DATE, END_DATE, END_PLAN_DATE, DELETED_FLAG, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, BLOCK_UK, RATEREVIEWTYPE_UK
+) VALUES (
+    TO_DATE('20260528', 'YYYYMMDD'), 66666037, 66666037, 130, 411, '50105',
+    TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), TO_DATE('20271201', 'YYYYMMDD'), 'N', TO_DATE('20260528', 'YYYYMMDD'), 41000, 41001, -2, 3
+);
+COMMIT;
