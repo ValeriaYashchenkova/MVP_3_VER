@@ -1,76 +1,71 @@
-ORA-01400: cannot insert NULL into ("DWH4DM"."DEAL_EDIM"."END_FACT_DATE")
-
--- Заполнение родительской сделки в DWH4DM.DEAL_EDIM
+-- Заполнение родительской сделки в DWH4DM.DEAL_EDIM (Полный перечень атрибутов)
 INSERT INTO DWH4DM.DEAL_EDIM (
-    UK, DEALTABLE_UK, EFFECTIVE_FROM, EFFECTIVE_TO, DEALTYPE_UK, CLIENT_UK, DEAL_REF, 
-    START_DATE, END_PLAN_DATE, DEAL_CUR_AMT, CURRENCY_UK, PRODUCT_UK, DELETED_FLAG, DEFAULT_FLAG, AS_OF_DAY, JOB_INSERT, JOB_UPDATE
+    UK, DEALTABLE_UK, EFFECTIVE_FROM, EFFECTIVE_TO, DEALTYPE_UK, 
+    CLIENT_UK, DEAL_REF, START_DATE, END_PLAN_DATE, END_FACT_DATE, 
+    DEAL_CUR_AMT, SALESPLACE_BRANCH_UK, CURRENCY_UK, PRODUCT_UK, 
+    SUBHLDMEMBER_UK, SUBHLDMEMBER_CORE_UK, MODULE_BACK_UK, MODULE_FRONT_UK, 
+    REPAYMENTORDER_INT_UK, REPAYMENTORDER_PRI_UK, TECHOVERDRAFT_FLAG, 
+    DEALKIND_UK, DEALCLASS_UK, DEALPORTFOLIO_BACK_UK, DEALPORTFOLIO_FRONT_UK, 
+    DEALDIRECTION_UK, DELETED_FLAG, DEFAULT_FLAG, AS_OF_DAY, 
+    JOB_INSERT, JOB_UPDATE
 ) VALUES (
-    41000307, 411, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 412, 4188, 'REF_41000307', 
-    TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('20271201', 'YYYYMMDD'), -50000000.41, 810, 4199, 'N', 'N', TO_DATE('20260528', 'YYYYMMDD'), 41000, 41001
+    41000307,                                      -- UK
+    411,                                           -- DEALTABLE_UK
+    TO_DATE('20260506', 'YYYYMMDD'),               -- EFFECTIVE_FROM
+    TO_DATE('59991231', 'YYYYMMDD'),               -- EFFECTIVE_TO
+    412,                                           -- DEALTYPE_UK
+    4188,                                          -- CLIENT_UK
+    'REF_41000307',                                -- DEAL_REF
+    TO_DATE('20260506', 'YYYYMMDD'),               -- START_DATE
+    TO_DATE('20271201', 'YYYYMMDD'),               -- END_PLAN_DATE
+    TO_DATE('59991231', 'YYYYMMDD'),               -- END_FACT_DATE
+    -50000000.41,                                  -- DEAL_CUR_AMT
+    -1,                                            -- SALESPLACE_BRANCH_UK (заглушка)
+    810,                                           -- CURRENCY_UK
+    4199,                                          -- PRODUCT_UK
+    -1,                                            -- SUBHLDMEMBER_UK (заглушка)
+    -1,                                            -- SUBHLDMEMBER_CORE_UK (заглушка)
+    -1,                                            -- MODULE_BACK_UK (заглушка)
+    -1,                                            -- MODULE_FRONT_UK (заглушка)
+    -1,                                            -- REPAYMENTORDER_INT_UK (заглушка)
+    -1,                                            -- REPAYMENTORDER_PRI_UK (заглушка)
+    'N',                                           -- TECHOVERDRAFT_FLAG
+    1,                                             -- DEALKIND_UK (заглушка)
+    1,                                             -- DEALCLASS_UK (заглушка)
+    -1,                                            -- DEALPORTFOLIO_BACK_UK (заглушка)
+    -1,                                            -- DEALPORTFOLIO_FRONT_UK (заглушка)
+    1,                                             -- DEALDIRECTION_UK (заглушка)
+    'N',                                           -- DELETED_FLAG
+    'N',                                           -- DEFAULT_FLAG
+    TO_DATE('20260528', 'YYYYMMDD'),               -- AS_OF_DAY
+    41000,                                         -- JOB_INSERT
+    41001                                          -- JOB_UPDATE
 );
-commit;
-ORA-01400: cannot insert NULL into ("DWH"."FUNDINGRATE_VHIST"."RATETYPE_UK")
+COMMIT;
 
--- Назначение ставки для заявки 7 в dwh.FUNDINGRATE_VHIST
+
+-- Назначение ставки для заявки 7 в dwh.FUNDINGRATE_VHIST (Полный перечень атрибутов)
 INSERT INTO dwh.FUNDINGRATE_VHIST (
-    XK, FUNDINGBID_UK, EFFECTIVE_FROM, EFFECTIVE_TO, INT_RATE, VALIDFROM, VALIDTO, JOB_INSERT, DELETED_FLAG, AS_OF_DAY, JOB_UPDATE
+    XK, FUNDINGBID_UK, EFFECTIVE_FROM, EFFECTIVE_TO, INT_RATE, RATETYPE_UK, 
+    DWSCMIX, VALIDFROM, VALIDTO, JOB_INSERT, DELETED_FLAG, AS_OF_DAY, 
+    JOB_UPDATE, STOCKINDEX_UK, RATEREVIEWTYPE_UK, STANDARD_RATE, ADDITION_RATE
 ) VALUES (
-    41000001, 41090001, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 6.41, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 41000, 'N', TO_DATE('20260528', 'YYYYMMDD'), 41001
-);
-commit;
-ORA-01400: cannot insert NULL into ("DWH"."FUNDINGRATES_VHIST"."UUID_CCODE")
-
--- Кейс 9 (Позитивный): Чистая платформа TRF 
-INSERT INTO dwh.FUNDINGRATES_VHIST (
-    XK, FUNDINGKEYS_UK, PREVID_CCODE, FUNDINGRATETYPE_UK, EFFECTIVE_FROM, EFFECTIVE_TO, CURRENCY_UK, 
-    FTP_RATE, FUNDINGBASISINDICATOR_UK, STARTDEAL_DATE, ENDDEAL_DATE, DELETED_FLAG, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, VALIDFROM, VALIDTO, FTP_WO_FOR_RATE, REQUIRED_RESERVE_FACTOR
-) VALUES (
-    41000002, 41066001, 'PREV', 1, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 810, 
-    7.2, 1, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('20270501', 'YYYYMMDD'), 'N', TO_DATE('20260528', 'YYYYMMDD'), 41000, 41001, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 7.5, 0.1
-);
-commit;
-ORA-01400: cannot insert NULL into ("DWH"."FUNDINGKEYS_HDIM"."DWSCMIX")
-
-INSERT INTO dwh.FUNDINGKEYS_HDIM (UK, CCODE, DEAL_UK, ASSETFUNDALGORITHMS_UK, ASSETFUNDGROUPS_UK, GL2ACCOUNT_UK, ACCOUNT_UK, DELETED_FLAG, DEFAULT_FLAG, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, VALIDFROM, VALIDTO)
-VALUES (41066001, 'CC', 41000409, 104, 1589472093789, 415, 41000409, 'N', 'N', TO_DATE('20260528', 'YYYYMMDD'), 41000, 41001, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'));
-commit;
-ORA-01400: cannot insert NULL into ("DWH"."FUNDINGRATES_VHIST"."UUID_CCODE")
-
--- Кейс 12 (Негативный): Фактор резервирования равен 0.0 в dwh.FUNDINGRATES_VHIST
-INSERT INTO dwh.FUNDINGRATES_VHIST (
-    XK, FUNDINGKEYS_UK, PREVID_CCODE, FUNDINGRATETYPE_UK, EFFECTIVE_FROM, EFFECTIVE_TO, CURRENCY_UK, 
-    FTP_RATE, FUNDINGBASISINDICATOR_UK, STARTDEAL_DATE, ENDDEAL_DATE, DELETED_FLAG, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, VALIDFROM, VALIDTO, FTP_WO_FOR_RATE, REQUIRED_RESERVE_FACTOR
-) VALUES (
-    41000003, 41066012, 'PREV', 1, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 810, 
-    6.0, 1, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('20270501', 'YYYYMMDD'), 'N', TO_DATE('20260528', 'YYYYMMDD'), 41000, 41001, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 6.5, 0.0
-);
-commit;
-ORA-01400: cannot insert NULL into ("DWH"."DEAL2FUNDINGBID_VHIST"."DWSCMIX")
--- Позитивный мэтчинг row_number() на Шаге 4
-INSERT INTO dwh.DEAL2FUNDINGBID_VHIST (XK, FUNDINGBID_UK, DEAL_UK, EFFECTIVE_FROM, EFFECTIVE_TO, VALIDFROM, VALIDTO, JOB_INSERT, DELETED_FLAG, AS_OF_DAY, JOB_UPDATE, DEAL2FUNDINGBIDTYPE_UK)
-VALUES (41000004, 41090151, 41000515, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 41000, 'N', TO_DATE('20260528', 'YYYYMMDD'), 41001, 1);
-commit;
-ORA-00001: unique constraint (DWH4DM.FTPRATE_TEMP_SSTAT_PK) violated
-
--- Кейс 37 и 38: Моделируем сделку 41000937 
-INSERT INTO DWH4DM.FTPRATE_TEMP_SSTAT (
-VALUE_DAY, ACCOUNT_UK, DEAL_UK, FTPALGORITHM_UK, FTP_RATE, COMP_DAY, TENOR_NCODE,
-EFFECTIVE_FROM, EFFECTIVE_TO, STANDARDFTP_RATE, SLP_RATE, FTPFOR_RATE, BAL2USD4COMP_DATE,
-DELETED_FLAG, AS_OF_DAY, PARTITION_NUMBER, JOB_INSERT, JOB_UPDATE, FTP_PRIORITY, FUNDINGKEYS_UK, DESCRIPTION
-) VALUES (
-TO_DATE('20260528', 'YYYYMMDD'), 41000937, 41000937, 130, 0.075, TO_DATE('20260528', 'YYYYMMDD'), 90,
-TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 0.07, 0.005, 0.075, TO_DATE('20260528', 'YYYYMMDD'),
-'N', TO_DATE('20260528', 'YYYYMMDD'), 7, 41000, 41001, 3, NULL, 'QA41_YASHENKOVA_CASE_37_ORPHAN_DEAL'
-);
-commit;
-ORA-00001: unique constraint (DWH4DM.ACCTDEALBALANCE_FTP_SSTAT_PK) violated
-
--- Чтобы кейс сматчился на этапе fund_bid (Шаг 4), добавляем его в балансы управленческого учета
-INSERT INTO DWH4DM.ACCTDEALBALANCE_FTP_SSTAT (
-VALUE_DAY, ACCOUNT_UK, DEAL_UK, FTPALGORITHM_UK, DEALTABLE_UK, GL2ACCOUNT_NCODE,
-START_DATE, END_DATE, END_PLAN_DATE, DELETED_FLAG, AS_OF_DAY, JOB_INSERT, JOB_UPDATE, BLOCK_UK, RATEREVIEWTYPE_UK
-) VALUES (
-TO_DATE('20260528', 'YYYYMMDD'), 41000937, 41000937, 130, 411, '50105',
-TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), TO_DATE('20271201', 'YYYYMMDD'), 'N', TO_DATE('20260528', 'YYYYMMDD'), 41000, 41001, -2, 3
+    41000001,                                -- XK
+    41090001,                                -- FUNDINGBID_UK
+    TO_DATE('20260506', 'YYYYMMDD'),         -- EFFECTIVE_FROM
+    TO_DATE('59991231', 'YYYYMMDD'),         -- EFFECTIVE_TO
+    6.41,                                    -- INT_RATE
+    1,                                       -- RATETYPE_UK (заглушка)
+    '0',                                     -- DWSCMIX (строковая техническая заглушка)
+    TO_DATE('20260506', 'YYYYMMDD'),         -- VALIDFROM
+    TO_DATE('59991231', 'YYYYMMDD'),         -- VALIDTO
+    41000,                                   -- JOB_INSERT
+    'N',                                     -- DELETED_FLAG
+    TO_DATE('20260528', 'YYYYMMDD'),         -- AS_OF_DAY
+    41001,                                   -- JOB_UPDATE
+    -1,                                      -- STOCKINDEX_UK (заглушка)
+    -1,                                      -- RATEREVIEWTYPE_UK (заглушка)
+    6.41,                                    -- STANDARD_RATE (совпадает с INT_RATE)
+    0.0                                      -- ADDITION_RATE (надбавка)
 );
 COMMIT;
