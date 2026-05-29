@@ -1,0 +1,129 @@
+-- ===================================================================================
+-- SQL TEST SUITE: АУДИТ ФИНАНСОВЫХ И ИНФРАСТРУКТУРНЫХ АНОМАЛИЙ СТЦ (Патч 41)
+-- Цель: Отлов багов по всем 49 тест-кейсам после загрузки ETL.
+-- Ожидаемый результат КАЖДОГО запроса: 0 строк (No rows selected).
+-- ===================================================================================
+
+ALTER SESSION SET CURRENT_SCHEMA = DWH4DM;
+
+-- -----------------------------------------------------------------------------------
+-- БЛОК 1: БАЗОВАЯ БИЗНЕС-ЛОГИКА И ПРИОРИТЕТЫ (Кейсы 4, 6, 8, 17)
+-- -----------------------------------------------------------------------------------
+
+-- 1.1 Проверка «грязных» технических заглушек (Финансовый вес фиктивной строки > 0)
+SELECT ACCOUNT_UK, FTP_RATE, DESCRIPTION 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE ACCOUNT_UK = -999 AND NVL(FTP_RATE, 0) > 0;
+
+-- 1.2 Сброс VIP-ставки (Приоритет 1), если бизнес-драйвер пустой или содержит мусор
+SELECT ACCOUNT_UK, FTP_PRIORITY, DESCRIPTION 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE ACCOUNT_UK = 41000206 AND FTP_PRIORITY = 1;
+
+-- 1.3 Потеря VIP-статуса (Ставка Приоритета 1 перетерлась TRF или Заявкой)
+SELECT f.ACCOUNT_UK, f.FTP_PRIORITY, m.FIX_COMP_RATE
+FROM FTPRATE_TEMP_SSTAT f
+JOIN MANFUNDRATES_VHIST m ON f.ACCOUNT_UK = m.ACCOUNT_UK
+WHERE m.ALG_FTP_DRIVER_CCODE IS NOT NULL 
+  AND f.FTP_PRIORITY <> 1;
+
+
+-- -----------------------------------------------------------------------------------
+-- БЛОК 2: НАДЁЖНОСТЬ ДЖОЙНОВ И ССЫЛОЧНАЯ ЦЕЛОСТНОСТЬ (Кейсы 10, 11, 14, 38)
+-- -----------------------------------------------------------------------------------
+
+-- 2.1 Декартово произведение (Сжатие дублей не сработало, дельта размножилась)
+SELECT ACCOUNT_UK, VALUE_DAY, COUNT(*) as ROW_CNT 
+FROM FTPRATE_TEMP_SSTAT 
+GROUP BY ACCOUNT_UK, VALUE_DAY 
+HAVING COUNT(*) > 1;
+
+-- 2.2 Смыв «Сделки-сироты» (Если использовали INNER JOIN вместо LEFT JOIN)
+-- Скрипт ищет сделки, которые есть в управленческом балансе, но пропали из целевой СТЦ.
+SELECT a.ACCOUNT_UK, a.DEAL_UK 
+FROM ACCTDEALBALANCE_FTP_SSTAT a
+LEFT JOIN FTPRATE_TEMP_SSTAT f ON a.ACCOUNT_UK = f.ACCOUNT_UK AND a.VALUE_DAY = f.VALUE_DAY
+WHERE a.ACCOUNT_UK LIKE '410%' 
+  AND f.ACCOUNT_UK IS NULL;
+
+-- 2.3 Коллизия валют (Сделке присвоили ставку фондирования в другой валюте)
+SELECT f.ACCOUNT_UK, f.FUNDINGKEYS_UK, a.CURRENCY_ACCOUNT_UK, fk.CURRENCY_UK
+FROM FTPRATE_TEMP_SSTAT f
+JOIN ACCTDEALBALANCE_FTP_SSTAT a ON f.ACCOUNT_UK = a.ACCOUNT_UK
+JOIN dwh.FUNDINGKEYS_HDIM fk ON f.FUNDINGKEYS_UK = fk.UK
+WHERE a.CURRENCY_ACCOUNT_UK <> fk.CURRENCY_UK;
+
+
+-- -----------------------------------------------------------------------------------
+-- БЛОК 3: ФИНАНСОВЫЙ ЭКСТРИМ И МАТЕМАТИКА (Кейсы 16, 26, 42)
+-- -----------------------------------------------------------------------------------
+
+-- 3.1 Математическое отравление NULL-ами (Ставка исчезла из-за сложения с пустым полем)
+SELECT ACCOUNT_UK, FTP_RATE, FTPFOR_RATE 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE ACCOUNT_UK LIKE '410%' 
+  AND (FTP_RATE IS NULL OR FTPFOR_RATE IS NULL);
+
+-- 3.2 Ошибка Zero Divide или отсечение легитимной отрицательной ставки
+SELECT ACCOUNT_UK, FTP_RATE 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE ACCOUNT_UK = 41001043 AND FTP_RATE >= 0; -- Ожидали ставку -0.25%, если >= 0, то баг.
+
+-- 3.3 Нулевая маржа (СТЦ ошибочно приравнялся к клиентской ставке кредита)
+SELECT f.ACCOUNT_UK, f.FTP_RATE as TRANSFER_RATE, adb.RATE as CLIENT_RATE
+FROM FTPRATE_TEMP_SSTAT f
+JOIN ACCTDEALBALANCE_FTP_SSTAT adb ON f.ACCOUNT_UK = adb.ACCOUNT_UK 
+WHERE f.FTP_RATE = adb.RATE;
+
+
+-- -----------------------------------------------------------------------------------
+-- БЛОК 4: ВРЕМЕННЫЕ ОСИ И ПАРТИЦИИ (Кейсы 41, 48, 49)
+-- -----------------------------------------------------------------------------------
+
+-- 4.1 Пересечение исторических периодов SCD2 (Overlap)
+-- Проверяем, что на один VALUE_DAY не подтянулось две активные ставки.
+SELECT ACCOUNT_UK, VALUE_DAY, COUNT(*) 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE ACCOUNT_UK = 41001041 
+GROUP BY ACCOUNT_UK, VALUE_DAY 
+HAVING COUNT(*) > 1;
+
+-- 4.2 Вылет за границы партиций (Проблема 9999 года)
+-- В целевой таблице не должно быть дат окончания больше 31.12.5999
+SELECT ACCOUNT_UK, EFFECTIVE_TO 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE EFFECTIVE_TO > TO_DATE('59991231', 'YYYYMMDD');
+
+-- 4.3 Смена валюты на лету (На один VALUE_DAY зависло два баланса в разных валютах)
+SELECT ACCOUNT_UK, VALUE_DAY, COUNT(DISTINCT CURRENCY_ACCOUNT_UK) as CURRENCY_CNT
+FROM ACCTDEALBALANCE_FTP_SSTAT
+GROUP BY ACCOUNT_UK, VALUE_DAY
+HAVING COUNT(DISTINCT CURRENCY_ACCOUNT_UK) > 1;
+
+
+-- -----------------------------------------------------------------------------------
+-- БЛОК 5: ИНФРАСТРУКТУРНЫЕ АНОМАЛИИ (Кейсы 44, 45, 46)
+-- -----------------------------------------------------------------------------------
+
+-- 5.1 Пропуск грязного текста и невидимых символов (CHR(10), пробелы)
+-- Проверяем, что ETL не пропустил мусор в описание (DESCRIPTION) или в ключи.
+SELECT ACCOUNT_UK, DESCRIPTION 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE REGEXP_LIKE(DESCRIPTION, '[' || CHR(10) || CHR(13) || ']') 
+   OR DESCRIPTION LIKE ' %' 
+   OR DESCRIPTION LIKE '% ';
+
+-- 5.2 Проверка отсева мертвых зомби-счетов (Late Arriving Update)
+-- Сделка удалена в источнике (DELETED_FLAG = 'Y'), но СТЦ по ней почему-то рассчитался.
+SELECT f.ACCOUNT_UK, f.VALUE_DAY 
+FROM FTPRATE_TEMP_SSTAT f
+JOIN ACCTDEALBALANCE_FTP_SSTAT a ON f.ACCOUNT_UK = a.ACCOUNT_UK AND f.VALUE_DAY = a.VALUE_DAY
+WHERE a.DELETED_FLAG = 'Y';
+
+-- 5.3 Идемпотентность запуска потока
+-- Если мы запускали перегрузку дважды за один AS_OF_DAY, дублей быть не должно.
+SELECT ACCOUNT_UK, VALUE_DAY, AS_OF_DAY, COUNT(*) 
+FROM FTPRATE_TEMP_SSTAT 
+WHERE ACCOUNT_UK LIKE '410%'
+GROUP BY ACCOUNT_UK, VALUE_DAY, AS_OF_DAY
+HAVING COUNT(*) > 1;
