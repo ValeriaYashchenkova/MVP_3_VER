@@ -1,0 +1,72 @@
+все равно есть падения:
+ORA-00001: unique constraint (DWH.FUNDINGRATES_VHIST_PK) violated
+
+INSERT INTO dwh.FUNDINGRATES_VHIST (
+    XK, 
+    FUNDINGKEYS_UK, 
+    PREVID_CCODE, 
+    FUNDINGRATETYPE_UK, 
+    EFFECTIVE_FROM, 
+    EFFECTIVE_TO, 
+    UUID_CCODE, 
+    CURRENCY_UK, 
+    FTP_RATE, 
+    FUNDINGBASISINDICATOR_UK, 
+    STARTDEAL_DATE, 
+    ENDDEAL_DATE, 
+    DELETED_FLAG, 
+    DWSCMIX, 
+    AS_OF_DAY, 
+    JOB_INSERT, 
+    JOB_UPDATE, 
+    VALIDFROM, 
+    VALIDTO, 
+    FTP_WO_FOR_RATE, 
+    VERSION_VALUE, 
+    REQUIRED_RESERVE_FACTOR) VALUES (
+    41000003,                                 -- XK
+    41066012,                                 -- FUNDINGKEYS_UK
+    'PREV',                                   -- PREVID_CCODE
+    1,                                        -- FUNDINGRATETYPE_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- EFFECTIVE_FROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- EFFECTIVE_TO
+    'UUID_41000003',                          -- UUID_CCODE (Добавлено)
+    810,                                      -- CURRENCY_UK
+    6.0,                                      -- FTP_RATE
+    1,                                        -- FUNDINGBASISINDICATOR_UK
+    TO_DATE('20260506', 'YYYYMMDD'),          -- STARTDEAL_DATE
+    TO_DATE('20270501', 'YYYYMMDD'),          -- ENDDEAL_DATE
+    'N',                                      -- DELETED_FLAG
+    '0',                                      -- DWSCMIX (Добавлено)
+    TO_DATE('20260528', 'YYYYMMDD'),          -- AS_OF_DAY
+    41000,                                    -- JOB_INSERT
+    41001,                                    -- JOB_UPDATE
+    TO_DATE('20260506', 'YYYYMMDD'),          -- VALIDFROM
+    TO_DATE('59991231', 'YYYYMMDD'),          -- VALIDTO
+    6.5,                                      -- FTP_WO_FOR_RATE
+    1,                                        -- VERSION_VALUE (Добавлено)
+    0.0                                       -- REQUIRED_RESERVE_FACTOR
+);
+COMMIT;
+
+
+ORA-01400: cannot insert NULL into ("DWH"."FUNDINGBID_HDIM"."STOCKINDEX_UK")
+
+-- Кейс 7 (Позитивный): Валидная точечная заявка на фандинг в dwh.FUNDINGBID_HDIM
+INSERT INTO dwh.FUNDINGBID_HDIM (
+    UK, FUNDINGBID_REF, FUNDINGBID_NCODE, FUNDINGTYPE_UK, CURRENCY_UK, CLIENT_UK, RATEREVIEWTYPE_UK,
+    FUNDING_AMT, ACCOUNT_UK, START_DATE, END_DATE, VALIDFROM, VALIDTO, JOB_INSERT, DELETED_FLAG, DEFAULT_FLAG, AS_OF_DAY, JOB_UPDATE
+) VALUES (
+    41090001, 'REF_BID_7', 7, 1, 810, 4188, 3, 
+    50000000.41, 41000307, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('20271201', 'YYYYMMDD'), TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 41000, 'N', 'N', TO_DATE('20260528', 'YYYYMMDD'), 41001
+);
+COMMIT;-- Кейс 8 (Негативный): Несовпадение планового конца сделки и заявки (Дата окончания пассива в ноябре вместо декабря)
+
+INSERT INTO dwh.FUNDINGBID_HDIM (
+    UK, FUNDINGBID_REF, FUNDINGBID_NCODE, FUNDINGTYPE_UK, CURRENCY_UK, CLIENT_UK, RATEREVIEWTYPE_UK,
+    FUNDING_AMT, ACCOUNT_UK, START_DATE, END_DATE, VALIDFROM, VALIDTO, JOB_INSERT, DELETED_FLAG, DEFAULT_FLAG, AS_OF_DAY, JOB_UPDATE
+) VALUES (
+    41090002, 'REF_BID_8', 8, 1, 810, 4188, 3,
+    50000000.41, 41000307, TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('20271101', 'YYYYMMDD'), TO_DATE('20260506', 'YYYYMMDD'), TO_DATE('59991231', 'YYYYMMDD'), 41000, 'N', 'N', TO_DATE('20260528', 'YYYYMMDD'), 41001
+);
+COMMIT; 
