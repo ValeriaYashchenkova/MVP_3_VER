@@ -1,0 +1,644 @@
+1) Проверка наличия бекапов до установки релиза (AFTER) и данных в них	select tt.column_value as error_desc 
+from TABLE(UAT_TESTUSER.FTPREFUND_TEST.CHK_TABLES_EMPTY('AFTER',:FTP_START_DATE,:FTP_END_DATE,:REFUND_START_DATE,
+:REFUND_END_DATE)) TT; --обязательные параметры
+/* Определение даты окончания периода расчета СТЦ через последний запуск WF_ACCTDEALBALANCE_FTP_SSTAT в рамках регламентов WF_REG_DWH4DM_RELOAD_IFRSFTP_PERIOD , WF_REG_DWH4DM_REGULAR_FTP */ select max(to_char(to_date(p_end.param_value,'YYYYMMDD'),'DD.MM.YYYY')) keep ( dense_rank first order by p_end.job_id desc) param_value from wf_control_fdtst2.log_job@ctl_um lj inner join wf_control_fdtst2.log_loading@ctl_um ll on ll.reg_name in ('WF_REG_DWH4DM_RELOAD_IFRSFTP_PERIOD', 'WF_REG_DWH4DM_REGULAR_FTP') and ll.loading_id = lj.loading_id and ll.start_dttm between sysdate-30 and sysdate --inner join wf_control_fdtst2.log_paramvalue p_start on p_start.job_id = lj.job_id and p_start.session_name ='GLOBAL' and p_start.param_name ='$$P_START_VALUE_DAY' inner join wf_control_fdtst2.log_paramvalue@ctl_um p_end on p_end.job_id = lj.job_id and p_end.session_name ='GLOBAL' and p_end.param_name ='$$P_END_VALUE_DAY' where lj.folder_name ='DWH4DMS' and lj.workflow_name ='WF_ACCTDEALBALANCE_FTP_SSTAT' and lj.workflow_run_id is not null and lj.start_dttm between sysdate-30 and sysdate
+/* Определение даты начала периода расчета СТЦ через последний запуск WF_ACCTDEALBALANCE_FTP_SSTAT в рамках регламентов WF_REG_DWH4DM_RELOAD_IFRSFTP_PERIOD , WF_REG_DWH4DM_REGULAR_FTP */ select max(to_char(to_date(p_start.param_value,'YYYYMMDD'),'DD.MM.YYYY')) keep ( dense_rank first order by p_start.job_id desc) param_value from wf_control_fdtst2.log_job@ctl_um lj inner join wf_control_fdtst2.log_loading@ctl_um ll on ll.reg_name in ('WF_REG_DWH4DM_RELOAD_IFRSFTP_PERIOD', 'WF_REG_DWH4DM_REGULAR_FTP') and ll.loading_id = lj.loading_id and ll.start_dttm between sysdate-30 and sysdate inner join wf_control_fdtst2.log_paramvalue@ctl_um p_start on p_start.job_id = lj.job_id and p_start.session_name ='GLOBAL' and p_start.param_name ='$$P_START_VALUE_DAY' --inner join wf_control_fdtst2.log_paramvalue p_end on p_end.job_id = lj.job_id and p_end.session_name ='GLOBAL' and p_end.param_name ='$$P_END_VALUE_DAY' where lj.folder_name ='DWH4DMS' and lj.workflow_name ='WF_ACCTDEALBALANCE_FTP_SSTAT' and lj.workflow_run_id is not null and lj.start_dttm between sysdate-30 and sysdate
+/* Определение даты окончания периода расчета компенсаций через последний запуск WF_IFRSREFUND_SAGG__SIMPLE в рамках регламентов WF_REG_DWH4DM_REGULAR_M_IFRSREFUND_SAGG !БЕЗ СДВИГА НА 1 ДЕНЬ ДЛЯ ВХОДЯЩИХ ОСТАТКОВ */ select max(to_char(TRUNC(to_date(p_start.param_value,'YYYYMMDD'),'MM')-1,'DD.MM.YYYY')) keep ( dense_rank first order by p_start.job_id desc) param_value from wf_control_fdtst2.log_job@ctl_um lj inner join wf_control_fdtst2.log_loading@ctl_um ll on ll.reg_name in ('WF_REG_DWH4DM_REGULAR_M_IFRSREFUND_SAGG') and ll.loading_id = lj.loading_id and ll.start_dttm between sysdate-30 and sysdate inner join wf_control_fdtst2.log_paramvalue@ctl_um p_start on p_start.job_id = lj.job_id and p_start.session_name ='GLOBAL' and p_start.param_name ='$$P_OPERATION_DAY' where lj.folder_name ='DWH4DMS' and lj.workflow_name ='WF_IFRSREFUND_SAGG__SIMPLE' and lj.workflow_run_id is not null and lj.start_dttm between sysdate-30 and sysdate
+/* Определение даты начала периода расчета компенсаций через последний запуск WF_IFRSREFUND_SAGG__SIMPLE в рамках регламентов WF_REG_DWH4DM_REGULAR_M_IFRSREFUND_SAGG !БЕЗ СДВИГА НА 1 ДЕНЬ ДЛЯ ВХОДЯЩИХ ОСТАТКОВ */ select max(to_char(trunc(trunc(to_date(p_start.param_value,'YYYYMMDD'),'MM')-1,'MM'),'DD.MM.YYYY')) keep ( dense_rank first order by p_start.job_id desc) param_value from wf_control_fdtst2.log_job@ctl_um lj inner join wf_control_fdtst2.log_loading@ctl_um ll on ll.reg_name in ('WF_REG_DWH4DM_REGULAR_M_IFRSREFUND_SAGG') and ll.loading_id = lj.loading_id and ll.start_dttm between sysdate-30 and sysdate inner join wf_control_fdtst2.log_paramvalue@ctl_um p_start on p_start.job_id = lj.job_id and p_start.session_name ='GLOBAL' and p_start.param_name ='$$P_OPERATION_DAY' where lj.folder_name ='DWH4DMS' and lj.workflow_name ='WF_IFRSREFUND_SAGG__SIMPLE' and lj.workflow_run_id is not null and lj.start_dttm between sysdate-30 and sysdate
+Проверка наличия бекапов до установки релиза (BEFORE) и данных в них	
+select tt.column_value as error_desc 
+from TABLE(UAT_TESTUSER.FTPREFUND_TEST.CHK_TABLES_EMPTY('BEFORE',:FTP_START_DATE,:FTP_END_DATE,:REFUND_START_DATE,
+:REFUND_END_DATE)) TT; --обязательные параметры
+
+
+Аналогично п.1
+Проверка наличия бекапов до установки релиза (SOURCE) и данных в них	select tt.column_value as error_desc 
+from TABLE(UAT_TESTUSER.FTPREFUND_TEST.CHK_TABLES_EMPTY('',:FTP_START_DATE,:FTP_END_DATE,:REFUND_START_DATE,
+:REFUND_END_DATE)) TT;	
+Аналогично п.1
+
+Проверка сходимости в 0 суммы компенсаций	
+select
+
+round(sum(case when ACCOUNTKIND_UK=1 then REFUND_RUR_AMT else -REFUND_RUR_AMT end),4) RUR,
+
+round(sum(case when ACCOUNTKIND_UK=1 then REFUND_USD_AMT else -REFUND_USD_AMT end),4) USD,
+
+round(sum(case when ACCOUNTKIND_UK=1 then REFUND_CUR_AMT else -REFUND_CUR_AMT end),4) CUR
+
+from DWH4DM.IFRSREFUND_SAGG a
+
+where value_day ='31.08.2025' and  ADJREPORTTYPE_UK=2 and deleted_flag = 'N'
+Сумма рассчитанных компенсаций по привлечению должна быть равна сумме рассчитанных компенсаций по размещению (с учетом корректировок). Проверка проводится в рублях. 
+
+
+
+Данная проверка не применима для усеченной тестовой среды
+Проверка падения сумм по всем алгоритмам
+select 'Pre', A.VALUE_DAY,GL2ACCOUNT_NCODE, SOURCE_UK,-- description,/// --trunc (a.as_of_day)  as_of_day,
+ACCOUNTKIND_UK,               
+       FTPALGORITHM_UK, ACCOUNTCLAUSE_NUMBER, GL2ACCOUNT_NCODE, 
+       gr.GROUP_REFERENCE , gr.name, AT.ccode, AT.name,                 
+       case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD','CNY') then CUR.ISO_CCODE else 'Other' end as CURRENCY , 
+       avg(A.FTP_AVG),                    
+       sum (REFUND_USD_AMT), 
+       sum (REFUND_CUR_AMT),
+       sum (REFUND_RUR_AMT), 
+      -- EXCHANGERATE_DAY,                    
+       count(*),                    
+       sum (BALANCE_CUR_AMT),                    
+       sum (BALANCE_USD_AMT) 
+--       avg (FTPFOR_AVG),
+--       avg (FORINDEX),
+--       avg (FTPFULL_AVG),
+--       avg (INDIVIDUAL_ADDITION_AVG),
+--       avg (INDUSTRIAL_SPREAD_AVG),
+--       avg (SLP_RATE_AVG),
+--       avg (SLP_RESERVE_RATE_AVG),
+--       avg (SOVEREIGN_SPREAD_AVG),
+--       avg (NONSTANDARD_PAYMENTS_AVG),
+--       avg (OWN_SPREAD_AVG),
+--       sum (REFUNDFOR_CUR_AMT),
+--sum (REFUNDFOR_RUR_AMT),
+--sum (REFUNDFOR_USD_AMT),
+--sum (REFUNDFULL_CUR_AMT),
+--sum (REFUNDFULL_RUR_AMT),
+--sum (REFUNDFULL_USD_AMT),
+--sum (REFUND_CUR_AMT),
+--sum (REFUND_CUR_AMT_BASE_RATE),
+--sum (REFUND_CUR_AMT_BREAKAGE_RATE),
+--sum (REFUND_CUR_AMT_IND_ADDITION),
+--sum (REFUND_CUR_AMT_IND_SPRD),
+--sum (REFUND_CUR_AMT_INT_OPTION),
+--sum (REFUND_CUR_AMT_NONSTND_PAYMNTS),
+--sum (REFUND_CUR_AMT_OWN_SPRD),
+--sum (REFUND_CUR_AMT_SLP),
+--sum (REFUND_CUR_AMT_SLP_RESERVE),
+--sum (REFUND_CUR_AMT_SOV_SPRD),
+--sum (REFUND_CUR_AMT_STND_RATE),
+--sum (REFUND_RUR_AMT),
+--sum (REFUND_RUR_AMT_BASE_RATE),
+--sum (REFUND_RUR_AMT_BREAKAGE_RATE),
+--sum (REFUND_RUR_AMT_IND_ADDITION),
+--sum (REFUND_RUR_AMT_IND_SPRD),
+--sum (REFUND_RUR_AMT_INT_OPTION),
+--sum (REFUND_RUR_AMT_NONSTND_PAYMNTS),
+--sum (REFUND_RUR_AMT_OWN_SPRD),
+--sum (REFUND_RUR_AMT_SLP),
+--sum (REFUND_RUR_AMT_SLP_RESERVE),
+--sum (REFUND_RUR_AMT_SOV_SPRD),
+--sum (REFUND_RUR_AMT_STND_RATE),
+-- avg(A.RATE)                    
+  from DWH4DM.IFRSREFUND_SAGG a                    
+  join DWH4DM.ACCOUNTCLAUSE_SDIM acs on acs.UK =a.ACCOUNTCLAUSE_UK                
+  join DWH4DM.CURRENCY_SDIM CUR on CUR.UK =a.CURRENCY_UK 
+  join DWH4DM.ACCOUNT_SDIM asd  on ASD.UK = a.ACCOUNT_UK and asd.DELETED_FLAG = 'N'
+  join DWH4DM.ACCOUNTGROUP_ldim  gr on asd.ACCOUNTGROUP_UK = gr.uk 
+  left join DWH4DM.ACCOUNTEQTYPE_LDIM AT on AsD.ACCOUNTEQTYPE_UK = AT.UK and AT.DELETED_FLAG = 'N'
+
+where A.VALUE_DAY = '30.06.2025'       --обязательные параметры             
+                     
+   and A.ADJREPORTTYPE_UK = 2
+  -- and account_number = '44007840000000000022'
+       and a.deleted_flag = 'N'
+      --and SOURCE_UK in  (19, 20) 
+                     
+   -- and FTPALGORITHM_UK = 174                 
+                    
+ group by A.VALUE_DAY,SOURCE_UK, ---description,--trunc (a.as_of_day) ,
+  ACCOUNTKIND_UK, ACCOUNTCLAUSE_NUMBER,   GL2ACCOUNT_NCODE,              
+          case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD', 'CNY') then CUR.ISO_CCODE else 'Other' end ,                
+          FTPALGORITHM_UK,-- EXCHANGERATE_DAY ,
+           gr.GROUP_REFERENCE, gr.name, AT.ccode, AT.name
+union 
+ 
+ select 'PROD',  A.VALUE_DAY,GL2ACCOUNT_NCODE, SOURCE_UK,-- description,/// --trunc (a.as_of_day)  as_of_day,
+ACCOUNTKIND_UK,               
+       FTPALGORITHM_UK, ACCOUNTCLAUSE_NUMBER, GL2ACCOUNT_NCODE, 
+       gr.GROUP_REFERENCE , gr.name, AT.ccode, AT.name,                 
+       case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD','CNY') then CUR.ISO_CCODE else 'Other' end as CURRENCY , 
+       avg(A.FTP_AVG),                    
+       sum (REFUND_USD_AMT), 
+       sum (REFUND_CUR_AMT),
+       sum (REFUND_RUR_AMT), 
+      -- EXCHANGERATE_DAY,                    
+       count(*),                    
+       sum (BALANCE_CUR_AMT),                    
+       sum (BALANCE_USD_AMT) 
+--       avg (FTPFOR_AVG),
+--       avg (FORINDEX),
+--       avg (FTPFULL_AVG),
+--       avg (INDIVIDUAL_ADDITION_AVG),
+--       avg (INDUSTRIAL_SPREAD_AVG),
+--       avg (SLP_RATE_AVG),
+--       avg (SLP_RESERVE_RATE_AVG),
+--       avg (SOVEREIGN_SPREAD_AVG),
+--       avg (NONSTANDARD_PAYMENTS_AVG),
+--       avg (OWN_SPREAD_AVG),
+--       sum (REFUNDFOR_CUR_AMT),
+--sum (REFUNDFOR_RUR_AMT),
+--sum (REFUNDFOR_USD_AMT),
+--sum (REFUNDFULL_CUR_AMT),
+--sum (REFUNDFULL_RUR_AMT),
+--sum (REFUNDFULL_USD_AMT),
+--sum (REFUND_CUR_AMT),
+--sum (REFUND_CUR_AMT_BASE_RATE),
+--sum (REFUND_CUR_AMT_BREAKAGE_RATE),
+--sum (REFUND_CUR_AMT_IND_ADDITION),
+--sum (REFUND_CUR_AMT_IND_SPRD),
+--sum (REFUND_CUR_AMT_INT_OPTION),
+--sum (REFUND_CUR_AMT_NONSTND_PAYMNTS),
+--sum (REFUND_CUR_AMT_OWN_SPRD),
+--sum (REFUND_CUR_AMT_SLP),
+--sum (REFUND_CUR_AMT_SLP_RESERVE),
+--sum (REFUND_CUR_AMT_SOV_SPRD),
+--sum (REFUND_CUR_AMT_STND_RATE),
+--sum (REFUND_RUR_AMT),
+--sum (REFUND_RUR_AMT_BASE_RATE),
+--sum (REFUND_RUR_AMT_BREAKAGE_RATE),
+--sum (REFUND_RUR_AMT_IND_ADDITION),
+--sum (REFUND_RUR_AMT_IND_SPRD),
+--sum (REFUND_RUR_AMT_INT_OPTION),
+--sum (REFUND_RUR_AMT_NONSTND_PAYMNTS),
+--sum (REFUND_RUR_AMT_OWN_SPRD),
+--sum (REFUND_RUR_AMT_SLP),
+--sum (REFUND_RUR_AMT_SLP_RESERVE),
+--sum (REFUND_RUR_AMT_SOV_SPRD),
+--sum (REFUND_RUR_AMT_STND_RATE),
+-- avg(A.RATE)            
+  from DWH4DM.IFRSREFUND_SAGG@DWSTPROD_DMFR a
+join DWH4DM.ACCOUNTCLAUSE_SDIM@DWSTPROD_DMFR acs on acs.UK =a.ACCOUNTCLAUSE_UK                
+  join DWH4DM.CURRENCY_SDIM@DWSTPROD_DMFR CUR on CUR.UK =a.CURRENCY_UK  
+  join DWH4DM.ACCOUNT_SDIM@DWSTPROD_DMFR asd  on ASD.UK = a.ACCOUNT_UK and asd.DELETED_FLAG = 'N'
+  join DWH4DM.ACCOUNTGROUP_ldim@DWSTPROD_DMFR  gr on asd.ACCOUNTGROUP_UK = gr.uk 
+  left join DWH4DM.ACCOUNTEQTYPE_LDIM@DWSTPROD_DMFR AT on AsD.ACCOUNTEQTYPE_UK = AT.UK and AT.DELETED_FLAG = 'N'                  
+                    
+    where A.VALUE_DAY ='30.06.2025'   --обязательные параметры                  
+
+    and a.deleted_flag = 'N'              
+   and A.ADJREPORTTYPE_UK = 2                    
+   --and SOURCE_UK in  (19, 20) 
+ -- and account_number = '44007840000000000022'                   
+   --- and FTPALGORITHM_UK = 174                 
+ group by A.VALUE_DAY,SOURCE_UK,--- description,--trunc (a.as_of_day) , 
+ ACCOUNTKIND_UK,   ACCOUNTCLAUSE_NUMBER, GL2ACCOUNT_NCODE,              
+          case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD','CNY') then CUR.ISO_CCODE else 'Other' end ,                
+          FTPALGORITHM_UK  , --EXCHANGERATE_DAY, 
+          gr.GROUP_REFERENCE, gr.name, AT.ccode, AT.name
+
+Процент заполнения данными полей в FTP_SSTAT 	
+
+WITH IS_NULL AS (SELECT 1 AS CNT
+,CASE WHEN value_day IS NULL THEN 1 ELSE 0 END AS  value_day
+,CASE WHEN account_uk IS NULL THEN 1 ELSE 0 END AS  account_uk
+,CASE WHEN deal_uk IS NULL THEN 1 ELSE 0 END AS  deal_uk
+,CASE WHEN ftpalgorithm_uk IS NULL THEN 1 ELSE 0 END AS  ftpalgorithm_uk
+,CASE WHEN tenor_uk IS NULL THEN 1 ELSE 0 END AS  tenor_uk
+,CASE WHEN tenor_ncode IS NULL THEN 1 ELSE 0 END AS  tenor_ncode
+,CASE WHEN gl2account_uk IS NULL THEN 1 ELSE 0 END AS  gl2account_uk
+,CASE WHEN gl2account_ncode IS NULL THEN 1 ELSE 0 END AS  gl2account_ncode
+,CASE WHEN maturity_uk IS NULL THEN 1 ELSE 0 END AS  maturity_uk
+,CASE WHEN profitcenter_uk IS NULL THEN 1 ELSE 0 END AS  profitcenter_uk
+,CASE WHEN product_l3_uk IS NULL THEN 1 ELSE 0 END AS  product_l3_uk
+,CASE WHEN client_uk IS NULL THEN 1 ELSE 0 END AS  client_uk
+,CASE WHEN fundingbid_uk IS NULL THEN 1 ELSE 0 END AS  fundingbid_uk
+,CASE WHEN ftp_rate IS NULL THEN 1 ELSE 0 END AS  ftp_rate
+,CASE WHEN standardftp_rate IS NULL THEN 1 ELSE 0 END AS  standardftp_rate
+,CASE WHEN principal_flag IS NULL THEN 1 ELSE 0 END AS  principal_flag
+,CASE WHEN adjusted_ftp_rate IS NULL THEN 1 ELSE 0 END AS  adjusted_ftp_rate
+,CASE WHEN forindex_rate IS NULL THEN 1 ELSE 0 END AS  forindex_rate
+,CASE WHEN bal2usd4comp_date IS NULL THEN 1 ELSE 0 END AS  bal2usd4comp_date
+,CASE WHEN ftpfor_pct_rate IS NULL THEN 1 ELSE 0 END AS  ftpfor_pct_rate
+,CASE WHEN calculationdate IS NULL THEN 1 ELSE 0 END AS  calculationdate
+,CASE WHEN DELETED_FLAG IS NULL THEN 1 ELSE 0 END AS  DELETED_FLAG
+,CASE WHEN AS_OF_DAY IS NULL THEN 1 ELSE 0 END AS  AS_OF_DAY
+,CASE WHEN JOB_INSERT IS NULL THEN 1 ELSE 0 END AS  JOB_INSERT
+,CASE WHEN JOB_UPDATE IS NULL THEN 1 ELSE 0 END AS  JOB_UPDATE
+FROM dwh4dm.FTP_SSTAT ), CNT_NULL AS (SELECT SUM(CNT) AS CNT
+,SUM(value_day) AS  value_day
+,SUM(account_uk) AS  account_uk
+,SUM(deal_uk) AS  deal_uk
+,SUM(ftpalgorithm_uk) AS  ftpalgorithm_uk
+,SUM(tenor_uk) AS  tenor_uk
+,SUM(tenor_ncode) AS  tenor_ncode
+,SUM(gl2account_uk) AS  gl2account_uk
+,SUM(maturity_uk) AS  maturity_uk
+,SUM(profitcenter_uk) AS  profitcenter_uk
+,SUM(product_l3_uk) AS  product_l3_uk
+,SUM(client_uk) AS  client_uk
+,SUM(fundingbid_uk) AS  fundingbid_uk
+,SUM(ftp_rate) AS  ftp_rate
+,SUM(standardftp_rate) AS  standardftp_rate
+,SUM(principal_flag) AS  principal_flag
+,SUM(adjusted_ftp_rate) AS  adjusted_ftp_rate
+,SUM(forindex_rate) AS  forindex_rate
+,SUM(bal2usd4comp_date) AS bal2usd4comp_date
+,SUM(ftpfor_pct_rate) AS  ftpfor_pct_rate
+,SUM(calculationdate) AS  calculationdate
+,SUM(DELETED_FLAG) AS  DELETED_FLAG
+,SUM(AS_OF_DAY) AS  AS_OF_DAY
+,SUM(JOB_INSERT) AS  JOB_INSERT
+,SUM(JOB_UPDATE) AS  JOB_UPDATE
+FROM IS_NULL) SELECT 'Процент заполнения данными атрибута:' AS IND
+,CASE WHEN value_day = 0 THEN 100 ELSE 100-value_day/(CNT/100) END AS  value_day
+,CASE WHEN account_uk = 0 THEN 100 ELSE 100-account_uk/(CNT/100) END AS  account_uk
+,CASE WHEN deal_uk = 0 THEN 100 ELSE 100-deal_uk/(CNT/100) END AS  deal_uk
+,CASE WHEN ftpalgorithm_uk = 0 THEN 100 ELSE 100-ftpalgorithm_uk/(CNT/100) END AS  ftpalgorithm_uk
+,CASE WHEN tenor_uk = 0 THEN 100 ELSE 100-tenor_uk/(CNT/100) END AS  tenor_uk
+,CASE WHEN tenor_ncode = 0 THEN 100 ELSE 100-tenor_ncode/(CNT/100) END AS  tenor_ncode
+,CASE WHEN gl2account_uk = 0 THEN 100 ELSE 100-gl2account_uk/(CNT/100) END AS  gl2account_uk
+,CASE WHEN maturity_uk = 0 THEN 100 ELSE 100-maturity_uk/(CNT/100) END AS  maturity_uk
+,CASE WHEN profitcenter_uk = 0 THEN 100 ELSE 100-profitcenter_uk/(CNT/100) END AS  profitcenter_uk
+,CASE WHEN product_l3_uk = 0 THEN 100 ELSE 100-product_l3_uk/(CNT/100) END AS  product_l3_uk
+,CASE WHEN client_uk = 0 THEN 100 ELSE 100-client_uk/(CNT/100) END AS  client_uk
+,CASE WHEN fundingbid_uk = 0 THEN 100 ELSE 100-fundingbid_uk/(CNT/100) END AS  fundingbid_uk
+,CASE WHEN ftp_rate = 0 THEN 100 ELSE 100-ftp_rate/(CNT/100) END AS  ftp_rate
+,CASE WHEN standardftp_rate = 0 THEN 100 ELSE 100-standardftp_rate/(CNT/100) END AS  standardftp_rate
+,CASE WHEN principal_flag = 0 THEN 100 ELSE 100-principal_flag/(CNT/100) END AS  principal_flag
+,CASE WHEN adjusted_ftp_rate = 0 THEN 100 ELSE 100-adjusted_ftp_rate/(CNT/100) END AS  adjusted_ftp_rate
+,CASE WHEN forindex_rate = 0 THEN 100 ELSE 100-forindex_rate/(CNT/100) END AS  forindex_rate
+,CASE WHEN bal2usd4comp_date = 0 THEN 100 ELSE 100-bal2usd4comp_date/(CNT/100) END AS  bal2usd4comp_date
+,CASE WHEN ftpfor_pct_rate = 0 THEN 100 ELSE 100-ftpfor_pct_rate/(CNT/100) END AS  ftpfor_pct_rate
+,CASE WHEN calculationdate = 0 THEN 100 ELSE 100-calculationdate/(CNT/100) END AS  calculationdate
+,CASE WHEN DELETED_FLAG = 0 THEN 100 ELSE 100-DELETED_FLAG/(CNT/100) END AS  DELETED_FLAG
+,CASE WHEN AS_OF_DAY = 0 THEN 100 ELSE 100-AS_OF_DAY/(CNT/100)
+Проверка аллокаций	select a.value_day, source_uk, 
+case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END as AL_BL,
+count Star, sum (REFUND_RUR_AMT)
+ from DWH4DM.IFRSREFUND_SAGG a 
+left join DWH4DM.ACCOUNTCLAUSE_SDIM C  on C.UK =a.ACCOUNTCLAUSE_UK and C.DELETED_FLAG = 'N'
+left join DWH4DM.PROFITCENTER_EDIM pc on PC.UK = a.PROFITCENTER_UK and PC.DELETED_FLAG = 'N' and a.VALUE_DAY between PC.EFFECTIVE_FROM and PC.EFFECTIVE_TO -1
+where  a.value_day >='31.01.2025'  --обязательные параметры 
+and a.ADJREPORTTYPE_UK=2
+AND ACCOUNTCLAUSE_UK = 6590295148 --ACCOUNTCLAUSE_NUMBER = '55300009'
+--and c.uk is null
+group by a.value_day, source_uk, case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END ;	
+Распределение прибыли между казначейством и бизнесом.
+
+В общей статистике нет выбросов
+Статистика 	select value_day,ADJREPORTTYPE_UK,  count Star
+from DWH4DM.IFRSREFUND_SAGG a
+where value_day >='31.12.2024' --обязательные параметры  
+and  ADJREPORTTYPE_UK = 2 --and ACCOUNTKIND_UK = 0; 
+group by  value_day, ADJREPORTTYPE_UK
+;	
+Примерное количество строк после расчета.
+
+В общей статистике нет выбросов
+Проверка множителя в остатках	
+select B.VALUE_DAY, B.BALANCE_RUR_AMT, B.BALANCEFACTOR, B.IFRSBALANCEFACTOR, B.AS_OF_DAY, B.JOB_INSERT,B.JOB_UPDATE, b.* 
+from DWH4DM.IFRSBALANCE_SSTAT b
+where b.VALUE_DAY >= '01.03.2025' and b.VALUE_DAY <= '31.03.2025' and --обязательные параметры
+     account_number not like '9%'
+and account_number not like '55555%'
+and salesplace_branch_uk not in (5203384761,5203385578) and 
+--and b.account_number = '40603810901850000000' --616916971931
+(B.BALANCEFACTOR = 0 or B.IFRSBALANCEFACTOR = 0);
+
+
+
+select *
+from DWH4DM.IFRSREFUND_SAGG  ir
+LEFT JOIN DMFRUA.ACCLFINANALITIC_MBRG AF ON AF.ACCOUNTCLAUSE_UK = ir.ACCOUNTCLAUSE_UK 
+                                        and ir.VALUE_DAY >= af.EFFECTIVE_FROM and ir.VALUE_DAY < af.EFFECTIVE_TO and af.DELETED_FLAG = 'N'
+where ir.value_day  between to_date ('01.01.2025', 'DD.MM.YYYY') and to_date ('31.01.2025', 'DD.MM.YYYY') --обязательные параметры
+and ir.deleted_flag <> 'Y' and ir.ADJREPORTTYPE_UK = 2
+and af.BUDGETITEM_UK is null  ;
+Проверка процента наполнения полей тбл FTP_SSTAT  по каждому алгоритму.	WITH IS_NULL AS (
+    SELECT
+        n.ftpalgorithm_uk,
+        1 AS total_records,
+        CASE WHEN n.value_day IS NULL THEN 1 ELSE 0 END AS value_day_null,
+        CASE WHEN n.account_uk IS NULL THEN 1 ELSE 0 END AS account_uk_null,
+        CASE WHEN n.deal_uk IS NULL THEN 1 ELSE 0 END AS deal_uk_null,
+        CASE WHEN n.tenor_uk IS NULL THEN 1 ELSE 0 END AS tenor_uk_null,
+        CASE WHEN n.tenor_ncode IS NULL THEN 1 ELSE 0 END AS tenor_ncode_null,
+        CASE WHEN n.gl2account_uk IS NULL THEN 1 ELSE 0 END AS gl2account_uk_null,
+        CASE WHEN n.gl2account_ncode IS NULL THEN 1 ELSE 0 END AS gl2account_ncode_null,
+        CASE WHEN n.maturity_uk IS NULL THEN 1 ELSE 0 END AS maturity_uk_null,
+        CASE WHEN n.profitcenter_uk IS NULL THEN 1 ELSE 0 END AS profitcenter_uk_null,
+        CASE WHEN n.product_l3_uk IS NULL THEN 1 ELSE 0 END AS product_l3_uk_null,
+        CASE WHEN n.client_uk IS NULL THEN 1 ELSE 0 END AS client_uk_null,
+        CASE WHEN n.fundingbid_uk IS NULL THEN 1 ELSE 0 END AS fundingbid_uk_null,
+        CASE WHEN n.ftp_rate IS NULL THEN 1 ELSE 0 END AS ftp_rate_null,
+        CASE WHEN n.standardftp_rate IS NULL THEN 1 ELSE 0 END AS standardftp_rate_null,
+        CASE WHEN n.principal_flag IS NULL THEN 1 ELSE 0 END AS principal_flag_null,
+        CASE WHEN n.adjusted_ftp_rate IS NULL THEN 1 ELSE 0 END AS adjusted_ftp_rate_null,
+        CASE WHEN n.forindex_rate IS NULL THEN 1 ELSE 0 END AS forindex_rate_null,
+        CASE WHEN n.bal2usd4comp_date IS NULL THEN 1 ELSE 0 END AS bal2usd4comp_date_null,
+        CASE WHEN n.ftpfor_pct_rate IS NULL THEN 1 ELSE 0 END AS ftpfor_pct_rate_null,
+        CASE WHEN n.calculationdate IS NULL THEN 1 ELSE 0 END AS calculationdate_null,
+        CASE WHEN n.deleted_flag IS NULL THEN 1 ELSE 0 END AS deleted_flag_null,
+        CASE WHEN n.as_of_day IS NULL THEN 1 ELSE 0 END AS as_of_day_null,
+        CASE WHEN n.jo
+b_update IS NULL THEN 1 ELSE 0 END AS job_update_null
+    FROM dwh4dm.FTP_SSTAT n
+),
+AGGREGATE_NULLS AS (
+    SELECT
+        ftpalgorithm_uk,
+        SUM(total_records) AS total_records,
+        SUM(value_day_null) AS value_day_null_cnt,
+        SUM(account_uk_null) AS account_uk_null_cnt,
+        SUM(deal_uk_null) AS deal_uk_null_cnt,
+        SUM(tenor_uk_null) AS tenor_uk_null_cnt,
+        SUM(tenor_ncode_null) AS tenor_ncode_null_cnt,
+        SUM(gl2account_uk_null) AS gl2account_uk_null_cnt,
+        SUM(gl2account_ncode_null) AS gl2account_ncode_null_cnt,
+        SUM(maturity_uk_null) AS maturity_uk_null_cnt,
+        SUM(profitcenter_uk_null) AS profitcenter_uk_null_cnt,
+        SUM(product_l3_uk_null) AS product_l3_uk_null_cnt,
+        SUM(client_uk_null) AS client_uk_null_cnt,
+        SUM(fundingbid_uk_null) AS fundingbid_uk_null_cnt,
+        SUM(ftp_rate_null) AS ftp_rate_null_cnt,
+        SUM(standardftp_rate_null) AS standardftp_rate_null_cnt,
+        SUM(principal_flag_null) AS principal_flag_null_cnt,
+        SUM(adjusted_ftp_rate_null) AS adjusted_ftp_rate_null_cnt,
+        SUM(forindex_rate_null) AS forindex_rate_null_cnt,
+        SUM(bal2usd4comp_date_null) AS bal2usd4comp_date_null_cnt,
+        SUM(ftpfor_pct_rate_null) AS ftpfor_pct_rate_null_cnt,
+        SUM(calculationdate_null) AS calculationdate_null_cnt,
+        SUM(deleted_flag_null) AS deleted_flag_null_cnt,
+        SUM(as_of_day_null) AS as_of_day_null_cnt,
+        SUM(job_insert_null) AS job_insert_null_cnt,
+        SUM(job_update_null) AS job_update_null_cnt
+    FROM IS_NULL
+GROUP BY ftpalgorithm_uk
+)
+SELECT
+    ftpalgorithm_uk,
+    'Процент заполнения полей для алгоритма ' || ftpalgorithm_uk AS description,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (value_day_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS value_day,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (account_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS account_uk,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (deal_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS deal_uk,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (tenor_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS tenor_uk,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (tenor_ncode_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS tenor_ncode,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (gl2account_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS gl2account_uk,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (gl2account_ncode_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS gl2account_ncode,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (maturity_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS maturity_uk,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (profitcenter_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS profitcenter_uk,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (product_l3_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS product_l3_uk,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE
+100 - (profitcenter_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS profitcenter_uk,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (product_l3_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS product_l3_uk,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (client_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS client_uk,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (fundingbid_uk_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS fundingbid_uk,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (ftp_rate_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS ftp_rate,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (standardftp_rate_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS standardftp_rate,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (principal_flag_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS principal_flag,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (adjusted_ftp_rate_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+) AS adjusted_ftp_rate,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (forindex_rate_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS forindex_rate,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (bal2usd4comp_date_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS bal2usd4comp_date,
+    ROUND(
+        CASE WHEN total_records = 0 THEN 100
+            ELSE 100 - (ftpfor_pct_rate_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS ftpfor_pct_rate,
+    ROUND(
+        CASE   WHEN total_records = 0 THEN 100
+            ELSE 100 - (calculationdate_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS calculationdate,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (deleted_flag_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS deleted_flag,
+    ROUND(
+        CASE   WHEN total_records = 0 THEN 100
+            ELSE 100 - (as_of_day_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS as_of_day,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (job_insert_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS job_insert,
+    ROUND(
+        CASE  WHEN total_records = 0 THEN 100
+            ELSE 100 - (job_update_null_cnt * 100 / NULLIF(total_records, 0))
+        END, 2
+    ) AS job_update
+FROM AGGREGATE_NULLS
+ORDER BY ftpalgorithm_uk;	
+
+Сверка СТЦ с эталонным расчетом	
+WITH ET AS ( SELECT *
+             FROM DWH4DM.FTP_SSTAT_BCKP_20230331 -- таблица бэкапа эталона
+             WHERE DELETED_FLAG = 'N'
+          AND VALUE_DAY BETWEEN TO_DATE('20230312','YYYYMMDD') AND TO_DATE('20230314','YYYYMMDD') --обязательные параметры
+)
+, FACT AS ( SELECT *
+          FROM DWH4DM.FTP_SSTAT
+          WHERE DELETED_FLAG = 'N'
+          AND VALUE_DAY BETWEEN TO_DATE('20230312','YYYYMMDD') AND TO_DATE('20230314','YYYYMMDD') --обязательные параметры
+)
+SELECT
+nvl(ET.VALUE_DAY,FACT.VALUE_DAY) as VALUE_DAY,
+nvl(ET.ACCOUNT_UK,FACT.ACCOUNT_UK) as ACCOUNT_UK,
+nvl(ET.DEAL_UK,FACT.DEAL_UK) as DEAL_UK,
+ET.FTPALGORITHM_UK AS ET_FTPALGORITHM_UK,FACT.FTPALGORITHM_UK AS FACT_FTPALGORITHM_UK,DECODE(NVl(ET.FTPALGORITHM_UK, -999), NVl(FACT.FTPALGORITHM_UK, -999) ,1,0) AS FTPALGORITHM_UK_CMPR,
+ET.TENOR_UK AS ET_TENOR_UK,FACT.TENOR_UK AS FACT_TENOR_UK,DECODE(NVl(ET.TENOR_UK, -999), NVl(FACT.TENOR_UK, -999) ,1,0) AS TENOR_UK_CMPR,
+ET.TENOR_NCODE AS ET_TENOR_NCODE,FACT.TENOR_NCODE AS FACT_TENOR_NCODE,DECODE(NVl(ET.TENOR_NCODE, -999), NVl(FACT.TENOR_NCODE, -999) ,1,0) AS TENOR_NCODE_CMPR,
+ET.GL2ACCOUNT_NCODE AS ET_GL2ACCOUNT_NCODE,FACT.GL2ACCOUNT_NCODE AS FACT_GL2ACCOUNT_NCODE,DECODE(NVl(ET.GL2ACCOUNT_NCODE, -999), NVl(FACT.GL2ACCOUNT_NCODE, -999) ,1,0) AS GL2ACCOUNT_NCODE_CMPR,
+ET.PROFITCENTER_UK AS ET_PROFITCENTER_UK,FACT.PROFITCENTER_UK AS FACT_PROFITCENTER_UK,DECODE(NVl(ET.PROFITCENTER_UK, -999), NVl(FACT.PROFITCENTER_UK, -999) ,1,0) AS PROFITCENTER_UK_CMPR,
+ET.PRODUCT_L3_UK AS ET_PRODUCT_L3_UK,FACT.PRODUCT_L3_UK AS FACT_PRODUCT_L3_UK,DECODE(NVl(ET.PRODUCT_L3_UK, -999), NVl(FACT.PRODUCT_L3_UK, -999) ,1,0) AS PRODUCT_L3_UK_CMPR,
+ET.FUNDINGBID_UK AS ET_FUNDINGBID_UK,FACT.FUNDINGBID_UK AS FACT_FUNDINGBID_UK,DECODE(NVl(ET.FUNDINGBID_UK, -999), NVl(FACT.FUNDINGBID_UK, -999) ,1,0) AS FUNDINGBID_UK_CMPR,
+ET.FTP_RATE AS ET_FTP_RATE,FACT.FTP_RATE AS FACT_FTP_RATE,DECODE(NVl(ET.FTP_RATE, -999), NVl(FACT.FTP_RATE, -999) ,1,0) AS FTP_RATE_CMPR,
+ET.ADJUSTED_FTP_RATE AS ET_ADJUSTED_FTP_RATE,FACT.ADJUSTED_FTP_RATE AS FACT_ADJUSTED_FTP_RATE,DECODE(NVl(ET.ADJUSTED_FTP_RATE, -999), NVl(FACT.ADJUSTED_FTP_RATE, -999) ,1,0) AS ADJUSTED_FTP_RATE_CMPR,
+ET.FORINDEX_RATE AS ET_FORINDEX_RATE,FACT.FORINDEX_RATE AS FACT_FORINDEX_RATE,DECODE(NVl(ET.FORINDEX_RATE, -999), NVl(FACT.FORINDEX_RATE, -999) ,1,0) AS FORINDEX_RATE_CMPR,
+ET.FTPFOR_PCT_RATE AS ET_FTPFOR_PCT_RATE,FACT.FTPFOR_PCT_RATE AS FACT_FTPFOR_PCT_RATE,DECODE(NVl(ET.FTPFOR_PCT_RATE, -999), NVl(FACT.FTPFOR_PCT_RATE, -999) ,1,0) AS FTPFOR_PCT_RATE_CMPR
+FROM ET FULL JOIN FACT
+ON
+ET.VALUE_DAY = FACT.VALUE_DAY and
+ET.ACCOUNT_UK = FACT.ACCOUNT_UK and
+ET.DEAL_UK = FACT.DEAL_UK
+WHERE
+DECODE(NVl(ET.FTP_RATE, -999), NVl(FACT.FTP_RATE, -999) ,0,1) = 1 OR
+DECODE(NVl(ET.ADJUSTED_FTP_RATE, -999), NVl(FACT.ADJUSTED_FTP_RATE, -999) ,0,1) = 1 OR
+DECODE(NVl(ET.FTPFOR_PCT_RATE, -999), NVl(FACT.FTPFOR_PCT_RATE, -999) ,0,1) = 1
+Результаты по сверке в агрегированном виде:
+SELECT  VALUE_DAY, ET_FTPALGORITHM_UK , FACT_FTPALGORITHM_UK,
+        MIN(ABS(NVL(ET_ADJUSTED_FTP_RATE,0)-NVL(FACT_ADJUSTED_FTP_RATE,0))) AS MIN_DELTA_ADJUSTED_FTP_RATE,
+        MAX(ABS(NVL(ET_ADJUSTED_FTP_RATE,0)-NVL(FACT_ADJUSTED_FTP_RATE,0))) AS MAX_DELTA_ADJUSTED_FTP_RATE,
+        COUNT(1) CNT
+FROM  READONLY.FTP_SSTAT_CMPR_202303_2
+WHERE FACT_FTPALGORITHM_UK NOT IN (104, 119)
+GROUP BY  VALUE_DAY, ET_FTPALGORITHM_UK , FACT_FTPALGORITHM_UK
+ORDER BY  VALUE_DAY, ET_FTPALGORITHM_UK , FACT_FTPALGORITHM_UK ;
+Сверка компенсаций с эталонным расчетом	
+with t_ish as (
+select 'ET' tip, A.VALUE_DAY,SOURCE_UK, description, -- trunc (a.as_of_day)
+FTPALGORITHM_UK,
+case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD','CNY') then CUR.ISO_CCODE else 'Other' end as CURRENCY ,
+avg(A.RATE) avg_rate,
+avg(A.FTP_AVG) avg_ftp,
+sum (REFUND_USD_AMT) refund_usd,
+count(*) cnt,
+sum (BALANCE_CUR_AMT) cur_amt,
+sum (BALANCE_USD_AMT) usd_amt
+from DWH4DM.IFRSREFUND_SAGG_BCKP_20230331 a  
+join DWH4DM.ACCOUNTCLAUSE_SDIM acs on acs.UK =a.ACCOUNTCLAUSE_UK
+join DWH4DM.CURRENCY_SDIM CUR on CUR.UK =a.CURRENCY_UK
+where A.VALUE_DAY = to_date ('28.02.2023') 
+--and A.FTPALGORITHM_UK>0
+and A.ADJREPORTTYPE_UK = 2
+and SOURCE_UK <> 13
+group by A.VALUE_DAY,SOURCE_UK, description,--trunc (a.as_of_day) ,
+case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD','CNY') then CUR.ISO_CCODE else 'Other' end ,
+FTPALGORITHM_UK
+ 
+union
+ 
+select 'FACT', A.VALUE_DAY,SOURCE_UK, description, -- trunc (a.as_of_day)
+FTPALGORITHM_UK,
+case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD','CNY') then CUR.ISO_CCODE else 'Other' end as CURRENCY,
+avg(A.RATE),
+avg(A.FTP_AVG),
+sum (REFUND_USD_AMT),
+count(*),
+sum (BALANCE_CUR_AMT),
+sum (BALANCE_USD_AMT)
+from DWH4DM.IFRSREFUND_SAGG a
+join DWH4DM.ACCOUNTCLAUSE_SDIM acs on acs.UK =a.ACCOUNTCLAUSE_UK
+join DWH4DM.CURRENCY_SDIM CUR on CUR.UK =a.CURRENCY_UK
+where A.VALUE_DAY = to_date ('28.02.2023') --обязательные параметры
+--and A.FTPALGORITHM_UK>0
+and A.ADJREPORTTYPE_UK = 2
+and SOURCE_UK <> 13
+ 
+group by A.VALUE_DAY,SOURCE_UK, description,--trunc (a.as_of_day) ,
+case when CUR.ISO_CCODE in ('RUR', 'EUR', 'USD','CNY') then CUR.ISO_CCODE else 'Other' end ,
+FTPALGORITHM_UK
+),
+t_day as (
+     select VALUE_DAY, SOURCE_UK,
+     description,
+     FTPALGORITHM_UK,
+     CURRENCY
+     from t_ish
+     group by VALUE_DAY, SOURCE_UK,
+     description,
+     FTPALGORITHM_UK,
+     CURRENCY
+ 
+)
+      
+     select
+     a.VALUE_DAY,
+     a.SOURCE_UK,
+     a.description,
+     a.FTPALGORITHM_UK,
+     a.CURRENCY,
+     avg(b.avg_rate) ET_avg_rate,
+     avg(b1.avg_rate) FACT_avg_rate,
+     avg(b.avg_ftp) ET_avg_ftp,
+     avg(b1.avg_ftp) FACT_avg_ftp,
+     avg(b.avg_ftp) - avg(b1.avg_ftp) delta_avg_ftp,
+sum(b.refund_usd) ET_refund_usd,
+     sum(b1.refund_usd) FACT_refund_usd,
+     sum(b.refund_usd) - sum(b1.refund_usd) delta_refund_usd,
+     sum(b.cur_amt) ET_cur_amt,
+     sum(b1.cur_amt) FACT_cur_amt,
+     sum(b.cnt) ET_cnt,
+     sum(b1.cnt) FACT_cnt,
+     sum(b.usd_amt) ET_usd_amt,
+     sum(b1.usd_amt) FACT_usd_amt,    
+     sum(b.usd_amt) - sum(b1.usd_amt) delta_usd_amt
+     from t_day a
+     left join t_ish b on a.VALUE_DAY=b.VALUE_DAY and b.tip='ET' and a.SOURCE_UK=b.SOURCE_UK and a.description=b.description and a.FTPALGORITHM_UK=b.FTPALGORITHM_UK and a.CURRENCY=b.CURRENCY
+ 
+     left join t_ish b1 on a.VALUE_DAY=b1.VALUE_DAY and b1.tip='FACT' and a.SOURCE_UK=b1.SOURCE_UK and a.description=b1.description and a.FTPALGORITHM_UK=b1.FTPALGORITHM_UK and a.CURRENCY=b1.CURRENCY
+group by      a.VALUE_DAY,
+     a.SOURCE_UK,
+     a.description,
+     a.FTPALGORITHM_UK,
+     a.CURRENCY
+
+Проверка компонент СТЦ в FTPCOMPVALUES_SHIST:
+компоненты не выходят за логически допустимые пределы,
+сумма компонент равна итоговой СТЦ.	
+select * from dwh4dm.ftpcompvalues_shist
+where effective_from <= $$FTP_END_DATE --тут должна быть дата окончания при релоаде --обязательные параметры
+and effective_to > $$FTP_START_DATE  --тут должна быть дата начала при релоаде --обязательные параметры
+and abs(VALUE_RATE) > 40
