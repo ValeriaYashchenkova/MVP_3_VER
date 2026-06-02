@@ -1,0 +1,345 @@
+#pip install PyQt6 GitPython
+import os
+import re
+import sys
+from git import Repo
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
+                             QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, 
+                             QLabel, QLineEdit, QTextEdit, QFileDialog, 
+                             QScrollArea, QMessageBox, QGroupBox)
+from PyQt6.QtCore import Qt
+
+# Словарь со всеми шаблонами и метаданными
+SQL_TEMPLATES = {
+    "1. Бэкапы (AFTER)": {
+        "query": "select tt.column_value as error_desc \nfrom TABLE(UAT_TESTUSER.FTPREFUND_TEST.CHK_TABLES_EMPTY('AFTER',:FTP_START_DATE,:FTP_END_DATE,:REFUND_START_DATE,:REFUND_END_DATE)) TT;",
+        "params": [":FTP_START_DATE", ":FTP_END_DATE", ":REFUND_START_DATE", ":REFUND_END_DATE"]
+    },
+    "2. Бэкапы (BEFORE)": {
+        "query": "select tt.column_value as error_desc \nfrom TABLE(UAT_TESTUSER.FTPREFUND_TEST.CHK_TABLES_EMPTY('BEFORE',:FTP_START_DATE,:FTP_END_DATE,:REFUND_START_DATE,:REFUND_END_DATE)) TT;",
+        "params": [":FTP_START_DATE", ":FTP_END_DATE", ":REFUND_START_DATE", ":REFUND_END_DATE"]
+    },
+    "3. Бэкапы (SOURCE)": {
+        "query": "select tt.column_value as error_desc \nfrom TABLE(UAT_TESTUSER.FTPREFUND_TEST.CHK_TABLES_EMPTY('',:FTP_START_DATE,:FTP_END_DATE,:REFUND_START_DATE,:REFUND_END_DATE)) TT;",
+        "params": [":FTP_START_DATE", ":FTP_END_DATE", ":REFUND_START_DATE", ":REFUND_END_DATE"]
+    },
+    "4. Сходимость в 0 сумм компенсаций": {
+        "query": "select\nround(sum(case when ACCOUNTKIND_UK=1 then REFUND_RUR_AMT else -REFUND_RUR_AMT end),4) RUR,\nround(sum(case when ACCOUNTKIND_UK=1 then REFUND_USD_AMT else -REFUND_USD_AMT end),4) USD,\nround(sum(case when ACCOUNTKIND_UK=1 then REFUND_CUR_AMT else -REFUND_CUR_AMT end),4) CUR\nfrom DWH4DM.IFRSREFUND_SAGG a\nwhere value_day = '{value_day}' and ADJREPORTTYPE_UK=2 and deleted_flag = 'N'",
+        "params": ["value_day"]
+    },
+    "5. Проверка падения сумм по алгоритмам": {
+        "query": "select 'Pre', A.VALUE_DAY, GL2ACCOUNT_NCODE, SOURCE_UK, ACCOUNTKIND_UK, FTPALGORITHM_UK, ACCOUNTCLAUSE_NUMBER, avg(A.FTP_AVG), sum (REFUND_USD_AMT), sum (REFUND_CUR_AMT), sum (REFUND_RUR_AMT), count(*) \nfrom DWH4DM.IFRSREFUND_SAGG a \nwhere A.VALUE_DAY = '{value_day}' and A.ADJREPORTTYPE_UK = 2 and a.deleted_flag = 'N' \ngroup by A.VALUE_DAY, SOURCE_UK, ACCOUNTKIND_UK, ACCOUNTCLAUSE_NUMBER, GL2ACCOUNT_NCODE, FTPALGORITHM_UK\nunion \nselect 'PROD', A.VALUE_DAY, GL2ACCOUNT_NCODE, SOURCE_UK, ACCOUNTKIND_UK, FTPALGORITHM_UK, ACCOUNTCLAUSE_NUMBER, avg(A.FTP_AVG), sum (REFUND_USD_AMT), sum (REFUND_CUR_AMT), sum (REFUND_RUR_AMT), count(*) \nfrom DWH4DM.IFRSREFUND_SAGG@DWSTPROD_DMFR a \nwhere A.VALUE_DAY = '{value_day}' and a.deleted_flag = 'N' and A.ADJREPORTTYPE_UK = 2 \ngroup by A.VALUE_DAY, SOURCE_UK, ACCOUNTKIND_UK, ACCOUNTCLAUSE_NUMBER, GL2ACCOUNT_NCODE, FTPALGORITHM_UK",
+        "params": ["value_day"]
+    },
+    "6. Процент заполнения FTP_SSTAT": {
+        "query": "WITH IS_NULL AS (SELECT 1 AS CNT, CASE WHEN value_day IS NULL THEN 1 ELSE 0 END AS value_day FROM dwh4dm.FTP_SSTAT) SELECT CASE WHEN value_day = 0 THEN 100 ELSE 100-value_day/(CNT/100) END FROM IS_NULL;",
+        "params": []
+    },
+    "7. Проверка аллокаций": {
+        "query": "select a.value_day, source_uk, case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END as AL_BL, count(*), sum(REFUND_RUR_AMT) \nfrom DWH4DM.IFRSREFUND_SAGG a \nleft join DWH4DM.PROFITCENTER_EDIM pc on PC.UK = a.PROFITCENTER_UK \nwhere a.value_day >= '{start_date}' and a.ADJREPORTTYPE_UK=2 \group by a.value_day, source_uk, case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END;",
+        "params": ["start_date"]
+    },
+    "8. Статистика (без выбросов)": {
+        "query": "select value_day, ADJREPORTTYPE_UK, count(*) \nfrom DWH4DM.IFRSREFUND_SAGG a \nwhere value_day >= '{start_date}' and ADJREPORTTYPE_UK = 2 \ngroup by value_day, ADJREPORTTYPE_UK;",
+        "params": ["start_date"]
+    },
+    "9. Проверка множителя в остатках": {
+        "query": "select B.VALUE_DAY, B.BALANCE_RUR_AMT, B.BALANCEFACTOR, B.IFRSBALANCEFACTOR \nfrom DWH4DM.IFRSBALANCE_SSTAT b \nwhere b.VALUE_DAY >= '{start_date}' and b.VALUE_DAY <= '{end_date}' \nand account_number not like '9%' and account_number not like '55555%' \nand (B.BALANCEFACTOR = 0 or B.IFRSBALANCEFACTOR = 0);",
+        "params": ["start_date", "end_date"]
+    },
+    "10. Сверка СТЦ с эталоном": {
+        "query": "WITH ET AS (SELECT * FROM DWH4DM.FTP_SSTAT_BCKP_20230331 WHERE DELETED_FLAG = 'N' AND VALUE_DAY BETWEEN TO_DATE('{start_date}','YYYYMMDD') AND TO_DATE('{end_date}','YYYYMMDD'))\n, FACT AS (SELECT * FROM DWH4DM.FTP_SSTAT WHERE DELETED_FLAG = 'N' AND VALUE_DAY BETWEEN TO_DATE('{start_date}','YYYYMMDD') AND TO_DATE('{end_date}','YYYYMMDD'))\nSELECT nvl(ET.VALUE_DAY, FACT.VALUE_DAY) FROM ET FULL JOIN FACT ON ET.ACCOUNT_UK = FACT.ACCOUNT_UK;",
+        "params": ["start_date", "end_date"]
+    },
+    "11. Проверка компонент СТЦ": {
+        "query": "select * from dwh4dm.ftpcompvalues_shist \nwhere effective_from <= '{ftp_end_date}' and effective_to > '{ftp_start_date}' and abs(VALUE_RATE) > 40;",
+        "params": ["ftp_start_date", "ftp_end_date"]
+    }
+}
+
+class TestGeneratorApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Генератор Тестов STC")
+        self.resize(1100, 750)
+        
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
+        
+        self.init_generator_tab()
+        self.init_git_tab()
+        
+    def init_generator_tab(self):
+        tab = QWidget()
+        main_layout = QHBoxLayout(tab)
+        
+        # Левая панель управления
+        left_panel = QVBoxLayout()
+        
+        # 1. Группа чекбоксов
+        cb_group = QGroupBox("Выбор шаблонов")
+        cb_layout = QVBoxLayout()
+        
+        hb_btns = QHBoxLayout()
+        btn_select_all = QPushButton("Выбрать все")
+        btn_select_all.clicked.connect(self.select_all_templates)
+        btn_deselect_all = QPushButton("Снять все")
+        btn_deselect_all.clicked.connect(self.deselect_all_templates)
+        hb_btns.addWidget(btn_select_all)
+        hb_btns.addWidget(btn_deselect_all)
+        cb_layout.addLayout(hb_btns)
+        
+        self.checkboxes = {}
+        for name in SQL_TEMPLATES.keys():
+            cb = QCheckBox(name)
+            cb.stateChanged.connect(self.refresh_dynamic_parameters)
+            cb_layout.addWidget(cb)
+            self.checkboxes[name] = cb
+            
+        cb_group.setLayout(cb_layout)
+        left_panel.addWidget(cb_group)
+        
+        # 2. Группа динамических параметров
+        self.param_group = QGroupBox("Обязательные параметры")
+        self.param_layout = QVBoxLayout()
+        self.param_group.setLayout(self.param_layout)
+        left_panel.addWidget(self.param_group)
+        self.param_inputs = {}
+        
+        # 3. Дополнительные условия
+        extra_group = QGroupBox("Дополнительные условия (Будут добавлены в WHERE)")
+        extra_layout = QVBoxLayout()
+        self.extra_conditions = QLineEdit()
+        self.extra_conditions.setPlaceholderText("Например: and account_number = '440078...'")
+        extra_layout.addWidget(self.extra_conditions)
+        extra_group.setLayout(extra_layout)
+        left_panel.addWidget(extra_group)
+        
+        # Кнопки генерации и сохранения
+        btn_generate = QPushButton("Сгенерировать предпросмотр")
+        btn_generate.setStyleSheet("background-color: #2b579a; color: white; font-weight: bold; font-size: 14px; padding: 8px;")
+        btn_generate.clicked.connect(self.generate_preview)
+        left_panel.addWidget(btn_generate)
+        
+        btn_save = QPushButton("Сохранить выбранные скрипты в папку")
+        btn_save.clicked.connect(self.save_scripts_to_folder)
+        left_panel.addWidget(btn_save)
+        
+        left_panel.addStretch()
+        
+        # Правая панель: Окно предпросмотра
+        right_panel = QVBoxLayout()
+        right_panel.addWidget(QLabel("<b>Редактирование и предпросмотр готовых скриптов:</b>"))
+        self.preview_tabs = QTabWidget()
+        right_panel.addWidget(self.preview_tabs)
+        
+        main_layout.addLayout(left_panel, 2)
+        main_layout.addLayout(right_panel, 3)
+        self.tabs.addTab(tab, "Генератор проверок")
+
+    def init_git_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        
+        group = QGroupBox("Пуш тестов в Git")
+        g_layout = QVBoxLayout()
+        
+        # Путь к папке
+        g_layout.addWidget(QLabel("Путь к локальной папке с тестами:"))
+        hb1 = QHBoxLayout()
+        self.git_folder_input = QLineEdit()
+        btn_browse_git = QPushButton("Обзор...")
+        btn_browse_git.clicked.connect(self.browse_git_folder)
+        hb1.addWidget(self.git_folder_input)
+        hb1.addWidget(btn_browse_git)
+        g_layout.addLayout(hb1)
+        
+        # Название ветки (Только номер задачи)
+        g_layout.addWidget(QLabel("Номер задачи для ветки (например, 12345):"))
+        self.git_branch_input = QLineEdit()
+        self.git_branch_input.setPlaceholderText("Будет создана ветка, состоящая только из этого номера")
+        g_layout.addWidget(self.git_branch_input)
+        
+        # Репозиторий
+        g_layout.addWidget(QLabel("Целевой репозиторий:"))
+        repo_lbl = QLineEdit("https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git")
+        repo_lbl.setReadOnly(True)
+        g_layout.addWidget(repo_lbl)
+        
+        # Кнопка отправки
+        btn_push = QPushButton("Создать ветку, сделать коммит и запушить")
+        btn_push.setStyleSheet("background-color: #008a00; color: white; font-weight: bold; font-size: 14px; padding: 10px;")
+        btn_push.clicked.connect(self.git_push_process)
+        g_layout.addWidget(btn_push)
+        
+        g_layout.addStretch()
+        group.setLayout(g_layout)
+        layout.addWidget(group)
+        
+        self.tabs.addTab(tab, "Git Интеграция")
+
+    # --- Логика генератора ---
+    def select_all_templates(self):
+        for cb in self.checkboxes.values():
+            cb.setChecked(True)
+
+    def deselect_all_templates(self):
+        for cb in self.checkboxes.values():
+            cb.setChecked(False)
+
+    def refresh_dynamic_parameters(self):
+        # Очищаем старые виджеты параметров
+        while self.param_layout.count():
+            item = self.param_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+                
+        needed_params = set()
+        for name, cb in self.checkboxes.items():
+            if cb.isChecked():
+                needed_params.update(SQL_TEMPLATES[name]["params"])
+                
+        self.param_inputs = {}
+        for param in sorted(needed_params):
+            hb = QHBoxLayout()
+            lbl = QLabel(f"{param}:")
+            lbl.setMinimumWidth(130)
+            ledit = QLineEdit()
+            # Дефолтные значения для удобства тестирования
+            if "date" in param.lower() or "day" in param.lower():
+                ledit.setPlaceholderText("ДД.ММ.ГГГГ")
+            hb.addWidget(lbl)
+            hb.addWidget(ledit)
+            self.param_layout.addLayout(hb)
+            self.param_inputs[param] = ledit
+
+    def generate_preview(self):
+        self.preview_tabs.clear()
+        extra = self.extra_conditions.text().strip()
+        
+        for name, cb in self.checkboxes.items():
+            if cb.isChecked():
+                raw_query = SQL_TEMPLATES[name]["query"]
+                params = SQL_TEMPLATES[name]["params"]
+                
+                # Подстановка параметров
+                formatted_query = raw_query
+                for p in params:
+                    val = self.param_inputs[p].text().strip()
+                    if not val:
+                        val = f"[{p}]" # Заглушка, если пусто
+                    
+                    if p.startswith(":"):
+                        formatted_query = formatted_query.replace(p, f"'{val}'")
+                    else:
+                        formatted_query = formatted_query.replace(f"{{{p}}}", val)
+                
+                # Подстановка доп. условий перед group by / order by или в конец
+                if extra:
+                    if "group by" in formatted_query.lower():
+                        parts = re.split(r'(group by)', formatted_query, flags=re.IGNORECASE)
+                        parts[0] += f"\n {extra} \n"
+                        formatted_query = "".join(parts)
+                    elif "union" in formatted_query.lower():
+                        # Для сложных union добавляем к каждой секции, если есть where
+                        formatted_query += f"\n-- Внимание: проверьте корректность вставки доп.условия для UNION:\n-- {extra}"
+                    else:
+                        formatted_query += f"\n{extra}"
+                
+                # Создаем вкладку редактора
+                text_area = QTextEdit()
+                text_area.setPlainText(formatted_query)
+                self.preview_tabs.addTab(text_area, name)
+
+    def save_scripts_to_folder(self):
+        if self.preview_tabs.count() == 0:
+            QMessageBox.warning(self, "Ошибка", "Сначала сгенерируйте предпросмотр!")
+            return
+            
+        folder = QFileDialog.getExistingDirectory(self, "Выберите папку для сохранения готовых шаблонов")
+        if not folder:
+            return
+            
+        try:
+            for i in range(self.preview_tabs.count()):
+                tab_title = self.preview_tabs.tabText(i)
+                # Безопасное имя файла
+                filename = "".join([c for c in tab_title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
+                filename = filename.replace(' ', '_').lower() + ".sql"
+                
+                file_path = os.path.join(folder, filename)
+                content = self.preview_tabs.widget(i).toPlainText()
+                
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                    
+            QMessageBox.information(self, "Успех", f"Успешно сохранено файлов: {self.preview_tabs.count()}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка сохранения", f"Произошла ошибка: {str(e)}")
+
+    # --- Логика Git ---
+    def browse_git_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Выберите папку проекта")
+        if folder:
+            self.git_folder_input.setText(folder)
+
+    def git_push_process(self):
+        path = self.git_folder_input.text().strip()
+        task_num = self.git_branch_input.text().strip()
+        
+        if not path or not os.path.exists(path):
+            QMessageBox.warning(self, "Ошибка", "Укажите корректный путь к локальной папке.")
+            return
+        if not task_num:
+            QMessageBox.warning(self, "Ошибка", "Поле номера задачи не должно быть пустым.")
+            return
+            
+        # Название ветки состоит только из номера задачи
+        branch_name = task_num
+        
+        try:
+            # Инициализация или подключение к существующему репозиторию
+            if not os.path.exists(os.path.join(path, '.git')):
+                repo = Repo.init(path)
+                # Добавление origin, если его нет
+                try:
+                    repo.create_remote('origin', 'https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git')
+                except:
+                    pass
+            else:
+                repo = Repo(path)
+
+            # Проверяем remote URL (опционально)
+            try:
+                origin = repo.remote('origin')
+            except ValueError:
+                origin = repo.create_remote('origin', 'https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git')
+
+            # Индексируем файлы
+            repo.git.add(A=True)
+            
+            # Проверяем, есть ли изменения для коммита
+            if not repo.index.diff("HEAD") and not repo.untracked_files:
+                # Если коммитить нечего, проверим, нужно ли просто переключить ветку
+                pass 
+            
+            # Создание и переход на новую ветку
+            new_branch = repo.create_head(branch_name)
+            new_branch.checkout()
+            
+            # Коммит
+            repo.index.commit(f"Автоматический коммит тестов по задаче №{task_num}")
+            
+            # Пуш в удаленный репозиторий
+            origin.push(refspec=f"{branch_name}:{branch_name}")
+            
+            QMessageBox.information(self, "Git Успех", f"Ветка '{branch_name}' успешно создана и отправлена в stc_ft.git!")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Git Ошибка", f"Произошла ошибка при работе с Git:\n{str(e)}")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = TestGeneratorApp()
+    window.show()
+    sys.exit(app.exec())
