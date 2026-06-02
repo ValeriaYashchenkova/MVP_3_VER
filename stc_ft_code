@@ -57,14 +57,12 @@ class AutoTestGeneratorTk:
         self.root = root
         self.root.title("Генератор Тестов STC (Stand-alone)")
         
-        # Автоматический расчет геометрии окна
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         width = int(screen_width * 0.8)
         height = int(screen_height * 0.8)
         self.root.geometry(f"{width}x{height}")
         
-        # Главные вкладки
         self.main_tabs = ttk.Notebook(root)
         self.main_tabs.pack(fill="both", expand=True)
         
@@ -179,7 +177,6 @@ class AutoTestGeneratorTk:
             self.preview_notebook.forget(tab)
         self.preview_texts.clear()
         
-        # ИСПРАВЛЕНО: .text() заменен на .get()
         extra = self.extra_entry.get().strip()
         
         for name, var in self.checkbox_vars.items():
