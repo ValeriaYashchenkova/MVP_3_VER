@@ -57,8 +57,15 @@ class AutoTestGeneratorTk:
         self.root = root
         self.root.title("Генератор Тестов STC (Stand-alone)")
         
-        # Исправленный формат геометрии (через x)
-        self.root.geometry("1150x750")
+        # --- Автоматический расчет размера окна без жестких строк ---
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        # Берем 80% от ширины и высоты экрана пользователя
+        width = int(screen_width * 0.8)
+        height = int(screen_height * 0.8)
+        
+        self.root.geometry(f"{width}x{height}")
+        # ------------------------------------------------------------
         
         # Главные вкладки
         self.main_tabs = ttk.Notebook(root)
@@ -71,7 +78,6 @@ class AutoTestGeneratorTk:
         tab = ttk.Frame(self.main_tabs)
         self.main_tabs.add(tab, text="Генератор проверок")
         
-        # Левая часть управления и правая часть предпросмотра
         paned = ttk.Panedwindow(tab, orient=tk.HORIZONTAL)
         paned.pack(fill="both", expand=True, padx=5, pady=5)
         
@@ -80,7 +86,6 @@ class AutoTestGeneratorTk:
         paned.add(left_frame, weight=2)
         paned.add(right_frame, weight=3)
         
-        # 1. Группа чекбоксов шаблонов
         lbl_frame_cb = ttk.LabelFrame(left_frame, text="Выбор шаблонов")
         lbl_frame_cb.pack(fill="x", padx=5, pady=5)
         
@@ -96,25 +101,21 @@ class AutoTestGeneratorTk:
             cb.pack(anchor="w", padx=5, pady=1)
             self.checkbox_vars[name] = var
 
-        # 2. Динамические параметры
         self.lbl_frame_params = ttk.LabelFrame(left_frame, text="Обязательные параметры")
         self.lbl_frame_params.pack(fill="x", padx=5, pady=5)
         self.param_fields_frame = ttk.Frame(self.lbl_frame_params)
         self.param_fields_frame.pack(fill="x", padx=5, pady=5)
         self.param_entries = {}
 
-        # 3. Дополнительные условия
         lbl_frame_extra = ttk.LabelFrame(left_frame, text="Дополнительные условия (Добавятся в WHERE)")
         lbl_frame_extra.pack(fill="x", padx=5, pady=5)
         self.extra_entry = ttk.Entry(lbl_frame_extra)
         self.extra_entry.pack(fill="x", padx=5, pady=5)
         self.extra_entry.insert(0, "")
         
-        # Кнопки действий
         ttk.Button(left_frame, text="Сгенерировать предпросмотр", command=self.generate_preview).pack(fill="x", padx=5, pady=5)
         ttk.Button(left_frame, text="Сохранить выбранные скрипты в папку", command=self.save_to_folder).pack(fill="x", padx=5, pady=2)
         
-        # Правая часть: Вкладки предпросмотра
         ttk.Label(right_frame, text="Редактирование и предпросмотр готовых скриптов:", font=("Arial", 10, "bold")).pack(anchor="w", pady=2)
         self.preview_notebook = ttk.Notebook(right_frame)
         self.preview_notebook.pack(fill="both", expand=True)
@@ -127,7 +128,6 @@ class AutoTestGeneratorTk:
         git_frame = ttk.LabelFrame(tab, text="Пуш изменений в Git репозиторий")
         git_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Локальная папка
         ttk.Label(git_frame, text="Путь к локальной папке проекта:").pack(anchor="w", padx=10, pady=(10, 2))
         folder_row = ttk.Frame(git_frame)
         folder_row.pack(fill="x", padx=10, pady=2)
@@ -135,23 +135,19 @@ class AutoTestGeneratorTk:
         self.git_dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
         ttk.Button(folder_row, text="Обзор...", command=self.browse_git_dir).pack(side="right")
         
-        # Номер ветки (Только номер задачи)
         ttk.Label(git_frame, text="Номер задачи для создания ветки (например, 74221):").pack(anchor="w", padx=10, pady=(10, 2))
         self.git_branch_entry = ttk.Entry(git_frame)
         self.git_branch_entry.pack(fill="x", padx=10, pady=2)
         
-        # URL Репозитория
         ttk.Label(git_frame, text="Удаленный репозиторий (stc_ft.git):").pack(anchor="w", padx=10, pady=(10, 2))
         repo_url = ttk.Entry(git_frame)
         repo_url.insert(0, "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git")
         repo_url.config(state="readonly")
         repo_url.pack(fill="x", padx=10, pady=2)
         
-        # Кнопка пуша
         btn_push = ttk.Button(git_frame, text="Создать ветку, Сделать коммит и Пушнуть", command=self.git_push_workflow)
         btn_push.pack(fill="x", padx=10, pady=20)
 
-    # --- Управление чекбоксами ---
     def select_all(self):
         for var in self.checkbox_vars.values():
             var.set(True)
@@ -181,7 +177,6 @@ class AutoTestGeneratorTk:
             ent.pack(side="left", fill="x", expand=True)
             self.param_entries[param] = ent
 
-    # --- Генерация ---
     def generate_preview(self):
         for tab in self.preview_notebook.tabs():
             self.preview_notebook.forget(tab)
@@ -244,9 +239,8 @@ class AutoTestGeneratorTk:
                     
             messagebox.showinfo("Успех", f"Успешно сохранено файлов: {len(self.preview_texts)}")
         except Exception as e:
-            messagebox.showerror("Ошибка保存", str(e))
+            messagebox.showerror("Ошибка", str(e))
 
-    # --- Логика Git через Native Subprocess ---
     def browse_git_dir(self):
         folder = filedialog.askdirectory(title="Выберите папку репозитория")
         if folder:
