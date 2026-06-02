@@ -56,7 +56,9 @@ class AutoTestGeneratorTk:
     def __init__(self, root):
         self.root = root
         self.root.title("Генератор Тестов STC (Stand-alone)")
-        self.root.geometry("1150, 750")
+        
+        # Исправленный формат геометрии (через x)
+        self.root.geometry("1150x750")
         
         # Главные вкладки
         self.main_tabs = ttk.Notebook(root)
@@ -138,7 +140,7 @@ class AutoTestGeneratorTk:
         self.git_branch_entry = ttk.Entry(git_frame)
         self.git_branch_entry.pack(fill="x", padx=10, pady=2)
         
-        # URL Репозитория (только для информации)
+        # URL Репозитория
         ttk.Label(git_frame, text="Удаленный репозиторий (stc_ft.git):").pack(anchor="w", padx=10, pady=(10, 2))
         repo_url = ttk.Entry(git_frame)
         repo_url.insert(0, "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git")
@@ -161,7 +163,6 @@ class AutoTestGeneratorTk:
         self.refresh_parameters()
 
     def refresh_parameters(self):
-        # Удаляем старые поля ввода параметров
         for widget in self.param_fields_frame.winfo_children():
             widget.destroy()
             
@@ -182,7 +183,6 @@ class AutoTestGeneratorTk:
 
     # --- Генерация ---
     def generate_preview(self):
-        # Очищаем старые вкладки предпросмотра
         for tab in self.preview_notebook.tabs():
             self.preview_notebook.forget(tab)
         self.preview_texts.clear()
@@ -215,7 +215,6 @@ class AutoTestGeneratorTk:
                     else:
                         formatted_query += f"\n{extra}"
                         
-                # Создаем текстовое поле с прокруткой во вкладке
                 tab_inner = ttk.Frame(self.preview_notebook)
                 self.preview_notebook.add(tab_inner, text=name)
                 
@@ -245,7 +244,7 @@ class AutoTestGeneratorTk:
                     
             messagebox.showinfo("Успех", f"Успешно сохранено файлов: {len(self.preview_texts)}")
         except Exception as e:
-            messagebox.showerror("Ошибка сохранения", str(e))
+            messagebox.showerror("Ошибка保存", str(e))
 
     # --- Логика Git через Native Subprocess ---
     def browse_git_dir(self):
@@ -255,8 +254,6 @@ class AutoTestGeneratorTk:
             self.git_dir_entry.insert(0, folder)
 
     def run_git_cmd(self, working_dir, args):
-        """Хелпер для безопасного выполнения системных команд Git"""
-        # Скрываем окно консоли на Windows (creationflags=0x08000000)
         result = subprocess.run(
             ["git"] + args,
             cwd=working_dir,
@@ -280,16 +277,13 @@ class AutoTestGeneratorTk:
             messagebox.showwarning("Ошибка", "Поле номера задачи пустое!")
             return
             
-        # Имя ветки состоит исключительно из номера
         branch_name = task_num
         
         try:
-            # 1. Проверяем инициализирован ли репозиторий
             if not os.path.exists(os.path.join(path, ".git")):
                 self.run_git_cmd(path, ["init"])
                 self.run_git_cmd(path, ["remote", "add", "origin", "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git"])
             
-            # На случай если репозиторий уже был, но origin нужно обновить/добавить
             try:
                 self.run_git_cmd(path, ["remote", "set-url", "origin", "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git"])
             except:
@@ -298,25 +292,18 @@ class AutoTestGeneratorTk:
                 except:
                     pass
 
-            # 2. Добавляем файлы в индекс
             self.run_git_cmd(path, ["add", "-A"])
-            
-            # 3. Создаем ветку и переключаемся на нее (используем -B для перезаписи, если уже существовала)
             self.run_git_cmd(path, ["checkout", "-B", branch_name])
             
-            # 4. Делаем коммит
             try:
                 self.run_git_cmd(path, ["commit", "-m", f"Автогенерация тестов по задаче {task_num}"])
             except Exception as e:
-                # Если коммитить нечего (изменений нет), Git вернет ошибку. Пропускаем этот момент.
                 if "nothing to commit" in str(e).lower() or "nothing added to commit" in str(e).lower():
                     pass
                 else:
                     raise e
             
-            # 5. Пушим ветку в origin
             self.run_git_cmd(path, ["push", "origin", f"{branch_name}:{branch_name}", "--force"])
-            
             messagebox.showinfo("Git Успех", f"Ветка '{branch_name}' успешно создана и отправлена в репозиторий!")
             
         except Exception as e:
