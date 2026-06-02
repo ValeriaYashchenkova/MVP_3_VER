@@ -1,13 +1,8 @@
-#pip install PyQt6 GitPython
 import os
 import re
-import sys
-from git import Repo
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
-                             QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, 
-                             QLabel, QLineEdit, QTextEdit, QFileDialog, 
-                             QScrollArea, QMessageBox, QGroupBox)
-from PyQt6.QtCore import Qt
+import subprocess
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
 
 # Словарь со всеми шаблонами и метаданными
 SQL_TEMPLATES = {
@@ -36,7 +31,7 @@ SQL_TEMPLATES = {
         "params": []
     },
     "7. Проверка аллокаций": {
-        "query": "select a.value_day, source_uk, case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END as AL_BL, count(*), sum(REFUND_RUR_AMT) \nfrom DWH4DM.IFRSREFUND_SAGG a \nleft join DWH4DM.PROFITCENTER_EDIM pc on PC.UK = a.PROFITCENTER_UK \nwhere a.value_day >= '{start_date}' and a.ADJREPORTTYPE_UK=2 \group by a.value_day, source_uk, case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END;",
+        "query": "select a.value_day, source_uk, case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END as AL_BL, count(*), sum(REFUND_RUR_AMT) \nfrom DWH4DM.IFRSREFUND_SAGG a \nleft join DWH4DM.PROFITCENTER_EDIM pc on PC.UK = a.PROFITCENTER_UK \nwhere a.value_day >= '{start_date}' and a.ADJREPORTTYPE_UK=2 \ngroup by a.value_day, source_uk, case when pc.rus_ccode = 'К06' then 'KZ' ELSE 'BL' END;",
         "params": ["start_date"]
     },
     "8. Статистика (без выбросов)": {
@@ -57,289 +52,277 @@ SQL_TEMPLATES = {
     }
 }
 
-class TestGeneratorApp(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Генератор Тестов STC")
-        self.resize(1100, 750)
+class AutoTestGeneratorTk:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Генератор Тестов STC (Stand-alone)")
+        self.root.geometry("1150, 750")
         
-        self.tabs = QTabWidget()
-        self.setCentralWidget(self.tabs)
+        # Главные вкладки
+        self.main_tabs = ttk.Notebook(root)
+        self.main_tabs.pack(fill="both", expand=True)
         
         self.init_generator_tab()
         self.init_git_tab()
-        
+
     def init_generator_tab(self):
-        tab = QWidget()
-        main_layout = QHBoxLayout(tab)
+        tab = ttk.Frame(self.main_tabs)
+        self.main_tabs.add(tab, text="Генератор проверок")
         
-        # Левая панель управления
-        left_panel = QVBoxLayout()
+        # Левая часть управления и правая часть предпросмотра
+        paned = ttk.Panedwindow(tab, orient=tk.HORIZONTAL)
+        paned.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # 1. Группа чекбоксов
-        cb_group = QGroupBox("Выбор шаблонов")
-        cb_layout = QVBoxLayout()
+        left_frame = ttk.Frame(paned, width=450)
+        right_frame = ttk.Frame(paned)
+        paned.add(left_frame, weight=2)
+        paned.add(right_frame, weight=3)
         
-        hb_btns = QHBoxLayout()
-        btn_select_all = QPushButton("Выбрать все")
-        btn_select_all.clicked.connect(self.select_all_templates)
-        btn_deselect_all = QPushButton("Снять все")
-        btn_deselect_all.clicked.connect(self.deselect_all_templates)
-        hb_btns.addWidget(btn_select_all)
-        hb_btns.addWidget(btn_deselect_all)
-        cb_layout.addLayout(hb_btns)
+        # 1. Группа чекбоксов шаблонов
+        lbl_frame_cb = ttk.LabelFrame(left_frame, text="Выбор шаблонов")
+        lbl_frame_cb.pack(fill="x", padx=5, pady=5)
         
-        self.checkboxes = {}
+        btn_layout = ttk.Frame(lbl_frame_cb)
+        btn_layout.pack(fill="x", padx=5, pady=2)
+        ttk.Button(btn_layout, text="Выбрать все", command=self.select_all).pack(side="left", padx=2)
+        ttk.Button(btn_layout, text="Снять все", command=self.deselect_all).pack(side="left", padx=2)
+        
+        self.checkbox_vars = {}
         for name in SQL_TEMPLATES.keys():
-            cb = QCheckBox(name)
-            cb.stateChanged.connect(self.refresh_dynamic_parameters)
-            cb_layout.addWidget(cb)
-            self.checkboxes[name] = cb
-            
-        cb_group.setLayout(cb_layout)
-        left_panel.addWidget(cb_group)
-        
-        # 2. Группа динамических параметров
-        self.param_group = QGroupBox("Обязательные параметры")
-        self.param_layout = QVBoxLayout()
-        self.param_group.setLayout(self.param_layout)
-        left_panel.addWidget(self.param_group)
-        self.param_inputs = {}
-        
+            var = tk.BooleanVar()
+            cb = ttk.Checkbutton(lbl_frame_cb, text=name, variable=var, command=self.refresh_parameters)
+            cb.pack(anchor="w", padx=5, pady=1)
+            self.checkbox_vars[name] = var
+
+        # 2. Динамические параметры
+        self.lbl_frame_params = ttk.LabelFrame(left_frame, text="Обязательные параметры")
+        self.lbl_frame_params.pack(fill="x", padx=5, pady=5)
+        self.param_fields_frame = ttk.Frame(self.lbl_frame_params)
+        self.param_fields_frame.pack(fill="x", padx=5, pady=5)
+        self.param_entries = {}
+
         # 3. Дополнительные условия
-        extra_group = QGroupBox("Дополнительные условия (Будут добавлены в WHERE)")
-        extra_layout = QVBoxLayout()
-        self.extra_conditions = QLineEdit()
-        self.extra_conditions.setPlaceholderText("Например: and account_number = '440078...'")
-        extra_layout.addWidget(self.extra_conditions)
-        extra_group.setLayout(extra_layout)
-        left_panel.addWidget(extra_group)
+        lbl_frame_extra = ttk.LabelFrame(left_frame, text="Дополнительные условия (Добавятся в WHERE)")
+        lbl_frame_extra.pack(fill="x", padx=5, pady=5)
+        self.extra_entry = ttk.Entry(lbl_frame_extra)
+        self.extra_entry.pack(fill="x", padx=5, pady=5)
+        self.extra_entry.insert(0, "")
         
-        # Кнопки генерации и сохранения
-        btn_generate = QPushButton("Сгенерировать предпросмотр")
-        btn_generate.setStyleSheet("background-color: #2b579a; color: white; font-weight: bold; font-size: 14px; padding: 8px;")
-        btn_generate.clicked.connect(self.generate_preview)
-        left_panel.addWidget(btn_generate)
+        # Кнопки действий
+        ttk.Button(left_frame, text="Сгенерировать предпросмотр", command=self.generate_preview).pack(fill="x", padx=5, pady=5)
+        ttk.Button(left_frame, text="Сохранить выбранные скрипты в папку", command=self.save_to_folder).pack(fill="x", padx=5, pady=2)
         
-        btn_save = QPushButton("Сохранить выбранные скрипты в папку")
-        btn_save.clicked.connect(self.save_scripts_to_folder)
-        left_panel.addWidget(btn_save)
-        
-        left_panel.addStretch()
-        
-        # Правая панель: Окно предпросмотра
-        right_panel = QVBoxLayout()
-        right_panel.addWidget(QLabel("<b>Редактирование и предпросмотр готовых скриптов:</b>"))
-        self.preview_tabs = QTabWidget()
-        right_panel.addWidget(self.preview_tabs)
-        
-        main_layout.addLayout(left_panel, 2)
-        main_layout.addLayout(right_panel, 3)
-        self.tabs.addTab(tab, "Генератор проверок")
+        # Правая часть: Вкладки предпросмотра
+        ttk.Label(right_frame, text="Редактирование и предпросмотр готовых скриптов:", font=("Arial", 10, "bold")).pack(anchor="w", pady=2)
+        self.preview_notebook = ttk.Notebook(right_frame)
+        self.preview_notebook.pack(fill="both", expand=True)
+        self.preview_texts = {}
 
     def init_git_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
+        tab = ttk.Frame(self.main_tabs)
+        self.main_tabs.add(tab, text="Git Интеграция")
         
-        group = QGroupBox("Пуш тестов в Git")
-        g_layout = QVBoxLayout()
+        git_frame = ttk.LabelFrame(tab, text="Пуш изменений в Git репозиторий")
+        git_frame.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Путь к папке
-        g_layout.addWidget(QLabel("Путь к локальной папке с тестами:"))
-        hb1 = QHBoxLayout()
-        self.git_folder_input = QLineEdit()
-        btn_browse_git = QPushButton("Обзор...")
-        btn_browse_git.clicked.connect(self.browse_git_folder)
-        hb1.addWidget(self.git_folder_input)
-        hb1.addWidget(btn_browse_git)
-        g_layout.addLayout(hb1)
+        # Локальная папка
+        ttk.Label(git_frame, text="Путь к локальной папке проекта:").pack(anchor="w", padx=10, pady=(10, 2))
+        folder_row = ttk.Frame(git_frame)
+        folder_row.pack(fill="x", padx=10, pady=2)
+        self.git_dir_entry = ttk.Entry(folder_row)
+        self.git_dir_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ttk.Button(folder_row, text="Обзор...", command=self.browse_git_dir).pack(side="right")
         
-        # Название ветки (Только номер задачи)
-        g_layout.addWidget(QLabel("Номер задачи для ветки (например, 12345):"))
-        self.git_branch_input = QLineEdit()
-        self.git_branch_input.setPlaceholderText("Будет создана ветка, состоящая только из этого номера")
-        g_layout.addWidget(self.git_branch_input)
+        # Номер ветки (Только номер задачи)
+        ttk.Label(git_frame, text="Номер задачи для создания ветки (например, 74221):").pack(anchor="w", padx=10, pady=(10, 2))
+        self.git_branch_entry = ttk.Entry(git_frame)
+        self.git_branch_entry.pack(fill="x", padx=10, pady=2)
         
-        # Репозиторий
-        g_layout.addWidget(QLabel("Целевой репозиторий:"))
-        repo_lbl = QLineEdit("https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git")
-        repo_lbl.setReadOnly(True)
-        g_layout.addWidget(repo_lbl)
+        # URL Репозитория (только для информации)
+        ttk.Label(git_frame, text="Удаленный репозиторий (stc_ft.git):").pack(anchor="w", padx=10, pady=(10, 2))
+        repo_url = ttk.Entry(git_frame)
+        repo_url.insert(0, "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git")
+        repo_url.config(state="readonly")
+        repo_url.pack(fill="x", padx=10, pady=2)
         
-        # Кнопка отправки
-        btn_push = QPushButton("Создать ветку, сделать коммит и запушить")
-        btn_push.setStyleSheet("background-color: #008a00; color: white; font-weight: bold; font-size: 14px; padding: 10px;")
-        btn_push.clicked.connect(self.git_push_process)
-        g_layout.addWidget(btn_push)
-        
-        g_layout.addStretch()
-        group.setLayout(g_layout)
-        layout.addWidget(group)
-        
-        self.tabs.addTab(tab, "Git Интеграция")
+        # Кнопка пуша
+        btn_push = ttk.Button(git_frame, text="Создать ветку, Сделать коммит и Пушнуть", command=self.git_push_workflow)
+        btn_push.pack(fill="x", padx=10, pady=20)
 
-    # --- Логика генератора ---
-    def select_all_templates(self):
-        for cb in self.checkboxes.values():
-            cb.setChecked(True)
+    # --- Управление чекбоксами ---
+    def select_all(self):
+        for var in self.checkbox_vars.values():
+            var.set(True)
+        self.refresh_parameters()
 
-    def deselect_all_templates(self):
-        for cb in self.checkboxes.values():
-            cb.setChecked(False)
+    def deselect_all(self):
+        for var in self.checkbox_vars.values():
+            var.set(False)
+        self.refresh_parameters()
 
-    def refresh_dynamic_parameters(self):
-        # Очищаем старые виджеты параметров
-        while self.param_layout.count():
-            item = self.param_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-                
+    def refresh_parameters(self):
+        # Удаляем старые поля ввода параметров
+        for widget in self.param_fields_frame.winfo_children():
+            widget.destroy()
+            
         needed_params = set()
-        for name, cb in self.checkboxes.items():
-            if cb.isChecked():
+        for name, var in self.checkbox_vars.items():
+            if var.get():
                 needed_params.update(SQL_TEMPLATES[name]["params"])
                 
-        self.param_inputs = {}
+        self.param_entries = {}
         for param in sorted(needed_params):
-            hb = QHBoxLayout()
-            lbl = QLabel(f"{param}:")
-            lbl.setMinimumWidth(130)
-            ledit = QLineEdit()
-            # Дефолтные значения для удобства тестирования
-            if "date" in param.lower() or "day" in param.lower():
-                ledit.setPlaceholderText("ДД.ММ.ГГГГ")
-            hb.addWidget(lbl)
-            hb.addWidget(ledit)
-            self.param_layout.addLayout(hb)
-            self.param_inputs[param] = ledit
+            row = ttk.Frame(self.param_fields_frame)
+            row.pack(fill="x", pady=2)
+            lbl = ttk.Label(row, text=f"{param}:", width=20, anchor="w")
+            lbl.pack(side="left")
+            ent = ttk.Entry(row)
+            ent.pack(side="left", fill="x", expand=True)
+            self.param_entries[param] = ent
 
+    # --- Генерация ---
     def generate_preview(self):
-        self.preview_tabs.clear()
-        extra = self.extra_conditions.text().strip()
+        # Очищаем старые вкладки предпросмотра
+        for tab in self.preview_notebook.tabs():
+            self.preview_notebook.forget(tab)
+        self.preview_texts.clear()
         
-        for name, cb in self.checkboxes.items():
-            if cb.isChecked():
+        extra = self.extra_entry.text().strip()
+        
+        for name, var in self.checkbox_vars.items():
+            if var.get():
                 raw_query = SQL_TEMPLATES[name]["query"]
                 params = SQL_TEMPLATES[name]["params"]
                 
-                # Подстановка параметров
                 formatted_query = raw_query
                 for p in params:
-                    val = self.param_inputs[p].text().strip()
+                    val = self.param_entries[p].get().strip()
                     if not val:
-                        val = f"[{p}]" # Заглушка, если пусто
+                        val = f"[{p}]"
                     
                     if p.startswith(":"):
                         formatted_query = formatted_query.replace(p, f"'{val}'")
                     else:
                         formatted_query = formatted_query.replace(f"{{{p}}}", val)
-                
-                # Подстановка доп. условий перед group by / order by или в конец
+                        
                 if extra:
                     if "group by" in formatted_query.lower():
                         parts = re.split(r'(group by)', formatted_query, flags=re.IGNORECASE)
                         parts[0] += f"\n {extra} \n"
                         formatted_query = "".join(parts)
                     elif "union" in formatted_query.lower():
-                        # Для сложных union добавляем к каждой секции, если есть where
-                        formatted_query += f"\n-- Внимание: проверьте корректность вставки доп.условия для UNION:\n-- {extra}"
+                        formatted_query += f"\n\n-- Внимание: UNION! Проверьте WHERE для каждой части:\n-- {extra}"
                     else:
                         formatted_query += f"\n{extra}"
+                        
+                # Создаем текстовое поле с прокруткой во вкладке
+                tab_inner = ttk.Frame(self.preview_notebook)
+                self.preview_notebook.add(tab_inner, text=name)
                 
-                # Создаем вкладку редактора
-                text_area = QTextEdit()
-                text_area.setPlainText(formatted_query)
-                self.preview_tabs.addTab(text_area, name)
+                txt = tk.Text(tab_inner, wrap="word", font=("Consolas", 10))
+                txt.insert("1.0", formatted_query)
+                txt.pack(fill="both", expand=True, padx=5, pady=5)
+                
+                self.preview_texts[name] = txt
 
-    def save_scripts_to_folder(self):
-        if self.preview_tabs.count() == 0:
-            QMessageBox.warning(self, "Ошибка", "Сначала сгенерируйте предпросмотр!")
+    def save_to_folder(self):
+        if not self.preview_texts:
+            messagebox.showwarning("Ошибка", "Сначала нажмите 'Сгенерировать предпросмотр'!")
             return
             
-        folder = QFileDialog.getExistingDirectory(self, "Выберите папку для сохранения готовых шаблонов")
+        folder = filedialog.askdirectory(title="Выберите папку для выгрузки SQL-файлов")
         if not folder:
             return
             
         try:
-            for i in range(self.preview_tabs.count()):
-                tab_title = self.preview_tabs.tabText(i)
-                # Безопасное имя файла
-                filename = "".join([c for c in tab_title if c.isalpha() or c.isdigit() or c==' ']).rstrip()
-                filename = filename.replace(' ', '_').lower() + ".sql"
+            for name, txt_widget in self.preview_texts.items():
+                clean_name = "".join([c for c in name if c.isalnum() or c==' ']).strip().replace(' ', '_').lower()
+                file_path = os.path.join(folder, f"{clean_name}.sql")
+                content = txt_widget.get("1.0", tk.END).strip()
                 
-                file_path = os.path.join(folder, filename)
-                content = self.preview_tabs.widget(i).toPlainText()
-                
-                with open(file_path, 'w', encoding='utf-8') as f:
+                with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
                     
-            QMessageBox.information(self, "Успех", f"Успешно сохранено файлов: {self.preview_tabs.count()}")
+            messagebox.showinfo("Успех", f"Успешно сохранено файлов: {len(self.preview_texts)}")
         except Exception as e:
-            QMessageBox.critical(self, "Ошибка сохранения", f"Произошла ошибка: {str(e)}")
+            messagebox.showerror("Ошибка сохранения", str(e))
 
-    # --- Логика Git ---
-    def browse_git_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Выберите папку проекта")
+    # --- Логика Git через Native Subprocess ---
+    def browse_git_dir(self):
+        folder = filedialog.askdirectory(title="Выберите папку репозитория")
         if folder:
-            self.git_folder_input.setText(folder)
+            self.git_dir_entry.delete(0, tk.END)
+            self.git_dir_entry.insert(0, folder)
 
-    def git_push_process(self):
-        path = self.git_folder_input.text().strip()
-        task_num = self.git_branch_input.text().strip()
+    def run_git_cmd(self, working_dir, args):
+        """Хелпер для безопасного выполнения системных команд Git"""
+        # Скрываем окно консоли на Windows (creationflags=0x08000000)
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=working_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            creationflags=0x08000000 if os.name == 'nt' else 0
+        )
+        if result.returncode != 0:
+            raise Exception(result.stderr if result.stderr else result.stdout)
+        return result.stdout
+
+    def git_push_workflow(self):
+        path = self.git_dir_entry.get().strip()
+        task_num = self.git_branch_entry.get().strip()
         
         if not path or not os.path.exists(path):
-            QMessageBox.warning(self, "Ошибка", "Укажите корректный путь к локальной папке.")
+            messagebox.showwarning("Ошибка", "Укажите корректный путь к папке проекта!")
             return
         if not task_num:
-            QMessageBox.warning(self, "Ошибка", "Поле номера задачи не должно быть пустым.")
+            messagebox.showwarning("Ошибка", "Поле номера задачи пустое!")
             return
             
-        # Название ветки состоит только из номера задачи
+        # Имя ветки состоит исключительно из номера
         branch_name = task_num
         
         try:
-            # Инициализация или подключение к существующему репозиторию
-            if not os.path.exists(os.path.join(path, '.git')):
-                repo = Repo.init(path)
-                # Добавление origin, если его нет
+            # 1. Проверяем инициализирован ли репозиторий
+            if not os.path.exists(os.path.join(path, ".git")):
+                self.run_git_cmd(path, ["init"])
+                self.run_git_cmd(path, ["remote", "add", "origin", "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git"])
+            
+            # На случай если репозиторий уже был, но origin нужно обновить/добавить
+            try:
+                self.run_git_cmd(path, ["remote", "set-url", "origin", "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git"])
+            except:
                 try:
-                    repo.create_remote('origin', 'https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git')
+                    self.run_git_cmd(path, ["remote", "add", "origin", "https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git"])
                 except:
                     pass
-            else:
-                repo = Repo(path)
 
-            # Проверяем remote URL (опционально)
+            # 2. Добавляем файлы в индекс
+            self.run_git_cmd(path, ["add", "-A"])
+            
+            # 3. Создаем ветку и переключаемся на нее (используем -B для перезаписи, если уже существовала)
+            self.run_git_cmd(path, ["checkout", "-B", branch_name])
+            
+            # 4. Делаем коммит
             try:
-                origin = repo.remote('origin')
-            except ValueError:
-                origin = repo.create_remote('origin', 'https://git.moscow.alfaintra.net/scm/stc_ft/stc_ft.git')
-
-            # Индексируем файлы
-            repo.git.add(A=True)
+                self.run_git_cmd(path, ["commit", "-m", f"Автогенерация тестов по задаче {task_num}"])
+            except Exception as e:
+                # Если коммитить нечего (изменений нет), Git вернет ошибку. Пропускаем этот момент.
+                if "nothing to commit" in str(e).lower() or "nothing added to commit" in str(e).lower():
+                    pass
+                else:
+                    raise e
             
-            # Проверяем, есть ли изменения для коммита
-            if not repo.index.diff("HEAD") and not repo.untracked_files:
-                # Если коммитить нечего, проверим, нужно ли просто переключить ветку
-                pass 
+            # 5. Пушим ветку в origin
+            self.run_git_cmd(path, ["push", "origin", f"{branch_name}:{branch_name}", "--force"])
             
-            # Создание и переход на новую ветку
-            new_branch = repo.create_head(branch_name)
-            new_branch.checkout()
-            
-            # Коммит
-            repo.index.commit(f"Автоматический коммит тестов по задаче №{task_num}")
-            
-            # Пуш в удаленный репозиторий
-            origin.push(refspec=f"{branch_name}:{branch_name}")
-            
-            QMessageBox.information(self, "Git Успех", f"Ветка '{branch_name}' успешно создана и отправлена в stc_ft.git!")
+            messagebox.showinfo("Git Успех", f"Ветка '{branch_name}' успешно создана и отправлена в репозиторий!")
             
         except Exception as e:
-            QMessageBox.critical(self, "Git Ошибка", f"Произошла ошибка при работе с Git:\n{str(e)}")
+            messagebox.showerror("Git Ошибка", f"Не удалось завершить операцию Git:\n{str(e)}")
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = TestGeneratorApp()
-    window.show()
-    sys.exit(app.exec())
+    root = tk.Tk()
+    app = AutoTestGeneratorTk(root)
+    root.mainloop()
