@@ -1,29 +1,64 @@
+Bug Report: Некорректная обработка SCD2-истории ставок (дублирование записей и выбор неактуальных данных)
+Приоритет: High (Критическое искажение финансовых данных в витрине)
+Компонент: WF_MORTGAGE_FTP_SHIST / DWH4DM.MORTGAGE_FTP_SHIST
+
+1. Описание проблемы
+В целевой витрине DWH4DM.MORTGAGE_FTP_SHIST обнаружено критическое расхождение данных:
+
+Размножение записей: Для одной сделки в витрину попадает несколько строк (дублирование).
+
+Искажение показателей: В атрибуты FTP_RATE и SPREAD_RATE записываются неактуальные исторические значения из таблицы-источника DWH4DM.DEALRATEINFO_SHIST вместо текущих актуальных.
+
+2. Причина (Root Cause)
+Поток выполняет LEFT JOIN к таблице истории ставок DEALRATEINFO_SHIST без фильтрации по версии записи (SCD2). В базе данных для одной сделки существует несколько версий ставок, перекрывающихся по времени действия. Поток подхватывает все подходящие по датам записи, что приводит к:
+
+Умножению количества строк (дублированию).
+
+Выбору случайного (не самого актуального) значения ставки.
+
+3. Пример воспроизведения (Evidence)
+Сделка: 5238061313
+
+Данные в источнике (DWH4DM.DEALRATEINFO_SHIST):
+Для этой сделки в системе лежат 2 актуальные версии записи с RATETYPE_UK = 1:
+
+01.01.1900 - 03.06.2008 (ставка NULL)
+
+03.06.2008 - 31.12.5999 (ставка 13.6)
+
+Результат сверки:
+
+В источнике (актуальная ставка на 2026г): NULL
+
+В витрине (фактически): 13.6
+
+Статус: FAIL (подтянута историческая запись 2008 года).
+
+4. SQL-скрипты для проверки (Доказательства)
+А. Проверка наличия дублей в витрине:
+
+SQL
+SELECT deal_uk, account_uk, COUNT(*) as row_cnt
+FROM DWH4DM.MORTGAGE_FTP_SHIST
+WHERE deal_uk = 5238061313
+GROUP BY deal_uk, account_uk
+HAVING COUNT(*) > 1;
+Б. Доказательство неверной ставки (Сверка с эталоном):
+
+SQL
 WITH target_data AS (
     SELECT deal_uk, ftp_rate as actual_ftp
     FROM DWH4DM.MORTGAGE_FTP_SHIST
-    WHERE deal_uk = 5238061313
-      AND effective_to = TO_DATE('31.12.5999', 'dd.mm.yyyy')
+    WHERE deal_uk = 5238061313 AND effective_to = TO_DATE('31.12.5999', 'dd.mm.yyyy')
 ),
 source_data AS (
     SELECT deal_uk, int_rate as expected_ftp
     FROM (
-        SELECT deal_uk, int_rate,
-               ROW_NUMBER() OVER (PARTITION BY deal_uk ORDER BY effective_from DESC) as rn
+        SELECT deal_uk, int_rate, ROW_NUMBER() OVER (PARTITION BY deal_uk ORDER BY effective_from DESC) as rn
         FROM DWH4DM.DEALRATEINFO_SHIST
-        WHERE deal_uk = 5238061313
-          AND ratetype_uk = 1
-          -- Исправленный подзапрос: берем максимум, чтобы избежать ORA-01427
-          AND effective_from <= (SELECT MAX(start_date) FROM DWH4DM.DEAL_EDIM WHERE uk = 5238061313)
-    )
-    WHERE rn = 1
+        WHERE deal_uk = 5238061313 AND ratetype_uk = 1
+    ) WHERE rn = 1
 )
-SELECT 
-    t.deal_uk,
-    t.actual_ftp,
-    s.expected_ftp,
-    CASE 
-        WHEN ABS(NVL(t.actual_ftp, 0) - NVL(s.expected_ftp, 0)) > 0.001 THEN 'ДЕФЕКТ: Ставка неверная'
-        ELSE 'OK'
-    END as status
-FROM target_data t
-JOIN source_data s ON t.deal_uk = s.deal_uk;
+SELECT t.deal_uk, t.actual_ftp, s.expected_ftp,
+       CASE WHEN ABS(NVL(t.actual_ftp, 0) - NVL(s.expected_ftp, 0)) > 0.001 THEN 'ДЕФЕКТ' ELSE 'OK' END as status
+FROM target_data t JOIN source_data s ON t.deal_uk = s.deal_uk;
