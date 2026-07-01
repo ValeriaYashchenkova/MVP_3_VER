@@ -1,0 +1,193 @@
+/* ========================================================================
+ Комплексный автотест бизнес-логики DWH4DM.MORTGAGE_FTP_SHIST
+ Формат вывода: TEST_NAME | DEAL_UK | ACCOUNT_UK | ERROR_DETAILS
+ Если результат пустой (0 rows) - тест пройден успешно.
+========================================================================
+*/
+
+WITH 
+-- 1. ДУБЛИРОВАНИЕ ОТКРЫТЫХ ЗАПИСЕЙ (SCD2)
+test_01_duplicates AS (
+    SELECT 
+        '1. Дубли открытых записей' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Найдено ' || COUNT(*) || ' открытых записей (EFFECTIVE_TO = 31.12.5999)' AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE effective_to = TO_DATE('31.12.5999', 'dd.mm.yyyy')
+    GROUP BY deal_uk, account_uk
+    HAVING COUNT(*) > 1
+),
+
+-- 2. РАЗРЫВЫ И ПЕРЕСЕЧЕНИЯ В БИЗНЕС-ИНТЕРВАЛАХ
+test_02_history_gaps AS (
+    SELECT 
+        '2. Разрывы в истории (SCD2)' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Дата закрытия ' || TO_CHAR(effective_to, 'DD.MM.YYYY') || ' не совпадает с началом следующей записи' AS error_details
+    FROM (
+        SELECT 
+            deal_uk, 
+            account_uk, 
+            effective_to,
+            LEAD(effective_from) OVER (PARTITION BY deal_uk, account_uk ORDER BY effective_from) AS next_start
+        FROM DWH4DM.MORTGAGE_FTP_SHIST
+    )
+    WHERE next_start IS NOT NULL 
+      AND effective_to <> next_start
+),
+
+-- 3. ПРОВЕРКА ДЛИТЕЛЬНОСТИ В ДНЯХ
+test_03_duration_days AS (
+    SELECT 
+        '3. Ошибка DURATION_DAYS' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'В БД: ' || NVL(TO_CHAR(duration_days), 'NULL') || ', Расчет: ' || TO_CHAR(end_plan_date - start_date) AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE nvl(duration_days, -1) <> NVL((end_plan_date - start_date), -1)
+),
+
+-- 4. ПРОВЕРКА ФЛАГА КОМБО-ИПОТЕКИ
+test_04_combo_flag AS (
+    SELECT 
+        '4. Ошибка COMBOMORTGAGE_FLAG' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'EXC_MAXLOAN: ' || NVL(TO_CHAR(exc_maxloan_st_rur_amt), 'NULL') || ', Флаг: ' || combomortgage_flag AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE combomortgage_flag <> CASE WHEN exc_maxloan_st_rur_amt IS NOT NULL THEN 'Y' ELSE 'N' END
+),
+
+-- 5. ПРОВЕРКА ФЛАГА ФИКСИРОВАННОЙ СТАВКИ
+test_05_fixed_rate AS (
+    SELECT 
+        '5. Ошибка FIXEDRATE_FLAG' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Программа: ' || program || ', KS_FACTOR: ' || ks_factor || ', Флаг: ' || fixedrate_flag AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE fixedrate_flag <> 
+        CASE 
+            WHEN ks_factor > 0 THEN 'N' 
+            WHEN is_old_flag = 'Y' AND program = 'Без ГП' THEN 'Y'
+            WHEN is_old_flag = 'Y' AND program <> 'Без ГП' THEN 'N'
+            ELSE 'Y' 
+        END
+),
+
+-- 6. ПРОВЕРКА ДОЛИ СТАНДАРТНОЙ ЧАСТИ
+test_06_standardpart_factor AS (
+    SELECT 
+        '6. Ошибка STANDARDPART_FACTOR' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Ожидалось другое значение. В БД: ' || standardpart_factor AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE nvl(standardpart_factor, -1) <> 
+        CASE 
+            WHEN exc_maxloan_st_rur_amt IS NOT NULL AND (exc_maxloan_st_rur_amt + maxloan_st_rur_amt) > 0 
+                THEN ROUND(exc_maxloan_st_rur_amt / (exc_maxloan_st_rur_amt + maxloan_st_rur_amt), 2)
+            WHEN program = 'Без ГП' THEN 1
+            ELSE 0 
+        END
+),
+
+-- 7. ПРОВЕРКА ФАКТОРА КС (KS_FACTOR)
+test_07_ks_factor AS (
+    SELECT 
+        '7. Ошибка KS_FACTOR' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Расчет КС Фактора не сошелся. В БД: ' || ks_factor AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE ks_factor <> 
+        CASE 
+            WHEN ks_factor > 0 THEN ROUND(ks_factor, 2) -- Проверка, что он не перезатерся
+            WHEN is_old_flag = 'Y' AND program = 'Без ГП' THEN 0
+            WHEN is_old_flag = 'Y' AND program <> 'Без ГП' THEN 1
+            ELSE 0 
+        END
+),
+
+-- 8. ПРОВЕРКА РАСЧЕТА СПРЕДА (SPREAD_RATE)
+test_08_spread AS (
+    SELECT 
+        '8. Ошибка SPREAD_RATE' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Спред в БД: ' || spread_rate || ', а должен быть: ' || 
+        CASE 
+            WHEN ks_factor > 0 THEN ftp_rate - (ROUND(ks_factor, 2) * ks_rate)
+            WHEN is_old_flag = 'Y' AND program = 'Без ГП' THEN ftp_rate
+            WHEN is_old_flag = 'Y' AND program <> 'Без ГП' THEN ftp_rate - ks_rate
+            ELSE ftp_rate 
+        END AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    -- Сравниваем через ABS для исключения микро-погрешностей округления float
+    WHERE ABS(spread_rate - 
+        CASE 
+            WHEN ks_factor > 0 THEN ftp_rate - (ROUND(ks_factor, 2) * ks_rate)
+            WHEN is_old_flag = 'Y' AND program = 'Без ГП' THEN ftp_rate
+            WHEN is_old_flag = 'Y' AND program <> 'Без ГП' THEN ftp_rate - ks_rate
+            ELSE ftp_rate 
+        END) > 0.001
+),
+
+-- 9. ПРОВЕРКА CHANGE_FTP_FLAG
+test_09_change_ftp_flag AS (
+    SELECT 
+        '9. Ошибка CHANGE_FTP_FLAG' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Несоответствие флага. FTP изменился: ' || CASE WHEN ftp_rate <> prev_ftp THEN 'Y' ELSE 'N' END || 
+        ', Спред изменился: ' || CASE WHEN spread_rate <> prev_spread THEN 'Y' ELSE 'N' END ||
+        ', Флаг в БД: ' || NVL(change_ftp_flag, 'NULL') AS error_details
+    FROM (
+        SELECT 
+            deal_uk, 
+            account_uk, 
+            ftp_rate, 
+            spread_rate, 
+            change_ftp_flag,
+            LAG(ftp_rate) OVER (PARTITION BY deal_uk, account_uk ORDER BY effective_from) AS prev_ftp,
+            LAG(spread_rate) OVER (PARTITION BY deal_uk, account_uk ORDER BY effective_from) AS prev_spread
+        FROM DWH4DM.MORTGAGE_FTP_SHIST
+    )
+    WHERE prev_ftp IS NOT NULL 
+      AND (
+          -- Ставка и спред изменились, но флаг не Y
+          (ftp_rate <> prev_ftp AND spread_rate <> prev_spread AND NVL(change_ftp_flag, 'N') <> 'Y')
+          OR 
+          -- Ставка изменилась, но спред остался прежним, а флаг ошибочно стоит Y
+          (ftp_rate <> prev_ftp AND spread_rate = prev_spread AND NVL(change_ftp_flag, 'N') = 'Y')
+      )
+),
+
+-- 10. ПРОВЕРКА МАППИНГА NULL ЗНАЧЕНИЙ ВО ФЛАГАХ ГОСПРОГРАММ
+test_10_null_flags AS (
+    SELECT 
+        '10. Незаполненный флаг (NULL вместо N)' AS test_name,
+        TO_CHAR(deal_uk) AS deal_uk,
+        TO_CHAR(account_uk) AS account_uk,
+        'Проверь флаги: STATEPROGRAM_FLAG, FAMILYMORTGAGE_FLAG, ISITSPECIALIST_FLAG' AS error_details
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE stateprogram_flag IS NULL 
+       OR familymortgage_flag IS NULL 
+       OR isitspecialist_flag IS NULL
+       OR stateprogram_flag = '?'
+)
+
+-- СБОРКА ВСЕХ ПРОВЕРОК
+SELECT * FROM test_01_duplicates
+UNION ALL SELECT * FROM test_02_history_gaps
+UNION ALL SELECT * FROM test_03_duration_days
+UNION ALL SELECT * FROM test_04_combo_flag
+UNION ALL SELECT * FROM test_05_fixed_rate
+UNION ALL SELECT * FROM test_06_standardpart_factor
+UNION ALL SELECT * FROM test_07_ks_factor
+UNION ALL SELECT * FROM test_08_spread
+UNION ALL SELECT * FROM test_09_change_ftp_flag
+UNION ALL SELECT * FROM test_10_null_flags
+ORDER BY test_name, deal_uk, account_uk;
