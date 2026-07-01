@@ -1,119 +1,32 @@
-/* ========================================================================
- ПОАТРИБУТНАЯ СВЕРКА: Расчетный эталон (Expected) vs Витрина (Actual)
- Выводит только те атрибуты по конкретным сделкам, где есть расхождения.
-======================================================================== */
-
-WITH expected_data AS (
-    -- ====================================================================
-    -- ВСТАВЬ СЮДА СКОПИРОВАННЫЙ БЛОК CTE ОТ РАЗРАБОТЧИКА (ШАГИ 1 - 10)
-    -- То есть все от "WITH ks_uk AS..." до конца выборки "mortgage_ftp_delta"
-    -- ====================================================================
-    SELECT * FROM mortgage_ftp_delta -- Это заглушка, замени на реальный CTE
+WITH ks_uk as (
+  select /*+ cardinality(1) materialize */ c.uk from dwh4dm.stockindex_sdim c where c.name_short = 'KS' and c.deleted_flag = 'N' and rownum = 1
 ),
-
-actual_data AS (
-    SELECT * FROM DWH4DM.MORTGAGE_FTP_SHIST
-    -- Берем только актуальные (открытые) записи на текущий день
-    WHERE effective_to = TO_DATE('31.12.5999', 'dd.mm.yyyy')
+stockindexrate as (
+  select /*+ cardinality(1) materialize */ b.rate from dwh4dm.stockindexrate_shist b join ks_uk c on c.uk = b.stockindex_uk where b.deleted_flag = 'N' and trunc(to_date('$$P_OPERATION_DAY', 'yyyymmdd'), 'MM') >= b.effective_from and trunc(to_date('$$P_OPERATION_DAY', 'yyyymmdd'), 'MM') < b.effective_to and rownum = 1
 ),
-
-joined_data AS (
-    SELECT 
-        NVL(e.deal_uk, a.deal_uk) AS deal_uk,
-        NVL(e.account_uk, a.account_uk) AS account_uk,
-        
-        -- Статусы наличия записей
-        CASE 
-            WHEN e.deal_uk IS NULL THEN 'EXCESS_IN_TARGET'
-            WHEN a.deal_uk IS NULL THEN 'MISSING_IN_TARGET'
-            ELSE 'MATCH' 
-        END AS record_match_status,
-
-        -- Сборка атрибутов (Expected vs Actual)
-        e.is_old_flag AS exp_is_old,             a.is_old_flag AS act_is_old,
-        e.program AS exp_program,                a.program AS act_program,
-        e.stateprogram_flag AS exp_state_flg,    a.stateprogram_flag AS act_state_flg,
-        e.fixedrate_flag AS exp_fixed_flg,       a.fixedrate_flag AS act_fixed_flg,
-        e.duration_days AS exp_dur_days,         a.duration_days AS act_dur_days,
-        e.deal_cur_amt AS exp_deal_amt,          a.deal_cur_amt AS act_deal_amt,
-        e.ftp_rate AS exp_ftp_rate,              a.ftp_rate AS act_ftp_rate,
-        e.base_rate AS exp_base_rate,            a.base_rate AS act_base_rate,
-        e.mpdp_pct AS exp_mpdp,                  a.mpdp_pct AS act_mpdp,
-        e.ks_factor AS exp_ks_factor,            a.ks_factor AS act_ks_factor,
-        e.spread_rate AS exp_spread,             a.spread_rate AS act_spread,
-        e.standardpart_factor AS exp_std_factor, a.standardpart_factor AS act_std_factor
-        
-    FROM expected_data e
-    FULL OUTER JOIN actual_data a 
-        ON e.deal_uk = a.deal_uk 
-       AND e.account_uk = a.account_uk
+d2a as (
+  select d2a.account_uk, d2a.deal2accttype_uk, d2a.deal_uk from dwh4dm.deal2acct_shist d2a where d2a.deal2accttype_uk in (1,3) and d2a.deleted_flag = 'N' and to_date('$$P_OPERATION_DAY', 'yyyymmdd') >= d2a.effective_from and to_date('$$P_OPERATION_DAY', 'yyyymmdd') < d2a.effective_to
+),
+product as (
+  select product_uk, uk, ccode from (select p2p.product_uk, pg.uk, pg.ccode, row_number() over (partition by p2p.product_uk order by pgts.ccode desc) rn from dwh4dm.product2productgroup_shist p2p join dwh4dm.productgroup_sdim pg on p2p.productgroup_uk = pg.uk and pg.deleted_flag = 'N' and pg.name = 'Ипотека' join dwh4dm.productgrouptype_sdim pgts on pg.productgrouptype_uk = pgts.uk and pgts.ccode in ('FTP', 'FTP_NEW') where p2p.deleted_flag = 'N' and p2p.effective_to = to_date('59991231', 'YYYYMMDD')) t where rn = 1
+),
+deal_diag as (
+    select d.uk as deal_uk
+    from dwh4dm.deal_edim d
+    join product pg on d.product_uk = pg.product_uk
+    join d2a on d.uk = d2a.deal_uk
+    left join dwh4dm.dealrateinfo_shist dri on d.uk = dri.deal_uk and dri.deleted_flag = 'N'
+    where d.uk = 5238061313
+    -- Вот здесь разработчик берет ВСЕ записи из dealrateinfo_shist!
 )
-
--- ====================================================================
--- БЛОК ВЫВОДА РАСХОЖДЕНИЙ (UNPIVOT)
--- ====================================================================
-
--- 1. Сначала проверяем потерянные или лишние строки
 SELECT 
-    deal_uk, 
-    account_uk, 
-    'RECORD_EXISTENCE' AS attribute_name, 
-    'MUST_EXIST' AS expected_value, 
-    record_match_status AS actual_value
-FROM joined_data 
-WHERE record_match_status <> 'MATCH'
-
+    'Количество записей в dealrateinfo_shist для сделки' as description,
+    count(*) as count_rows
+FROM dwh4dm.dealrateinfo_shist
+WHERE deal_uk = 5238061313
 UNION ALL
-
--- 2. Проверка бизнес-флагов
-SELECT deal_uk, account_uk, 'IS_OLD_FLAG', TO_CHAR(exp_is_old), TO_CHAR(act_is_old)
-FROM joined_data WHERE NVL(exp_is_old, '??') <> NVL(act_is_old, '??')
-
-UNION ALL
-SELECT deal_uk, account_uk, 'PROGRAM', TO_CHAR(exp_program), TO_CHAR(act_program)
-FROM joined_data WHERE NVL(exp_program, '?') <> NVL(act_program, '?')
-
-UNION ALL
-SELECT deal_uk, account_uk, 'STATEPROGRAM_FLAG', TO_CHAR(exp_state_flg), TO_CHAR(act_state_flg)
-FROM joined_data WHERE NVL(exp_state_flg, '??') <> NVL(act_state_flg, '??')
-
-UNION ALL
-SELECT deal_uk, account_uk, 'FIXEDRATE_FLAG', TO_CHAR(exp_fixed_flg), TO_CHAR(act_fixed_flg)
-FROM joined_data WHERE NVL(exp_fixed_flg, '??') <> NVL(act_fixed_flg, '??')
-
--- 3. Проверка числовых показателей (суммы, сроки)
-UNION ALL
-SELECT deal_uk, account_uk, 'DURATION_DAYS', TO_CHAR(exp_dur_days), TO_CHAR(act_dur_days)
-FROM joined_data WHERE NVL(exp_dur_days, -1) <> NVL(act_dur_days, -1)
-
-UNION ALL
-SELECT deal_uk, account_uk, 'DEAL_CUR_AMT', TO_CHAR(exp_deal_amt), TO_CHAR(act_deal_amt)
-FROM joined_data WHERE NVL(exp_deal_amt, -1) <> NVL(act_deal_amt, -1)
-
--- 4. Проверка ставок, факторов и спредов (Самое важное!)
--- Используем ABS() для исключения проблем с округлением плавающей точки
-UNION ALL
-SELECT deal_uk, account_uk, 'FTP_RATE', TO_CHAR(exp_ftp_rate), TO_CHAR(act_ftp_rate)
-FROM joined_data WHERE ABS(NVL(exp_ftp_rate, -1) - NVL(act_ftp_rate, -1)) > 0.001
-
-UNION ALL
-SELECT deal_uk, account_uk, 'BASE_RATE', TO_CHAR(exp_base_rate), TO_CHAR(act_base_rate)
-FROM joined_data WHERE ABS(NVL(exp_base_rate, -1) - NVL(act_base_rate, -1)) > 0.001
-
-UNION ALL
-SELECT deal_uk, account_uk, 'MPDP_PCT', TO_CHAR(exp_mpdp), TO_CHAR(act_mpdp)
-FROM joined_data WHERE ABS(NVL(exp_mpdp, -1) - NVL(act_mpdp, -1)) > 0.001
-
-UNION ALL
-SELECT deal_uk, account_uk, 'KS_FACTOR', TO_CHAR(exp_ks_factor), TO_CHAR(act_ks_factor)
-FROM joined_data WHERE ABS(NVL(exp_ks_factor, -1) - NVL(act_ks_factor, -1)) > 0.001
-
-UNION ALL
-SELECT deal_uk, account_uk, 'SPREAD_RATE', TO_CHAR(exp_spread), TO_CHAR(act_spread)
-FROM joined_data WHERE ABS(NVL(exp_spread, -1) - NVL(act_spread, -1)) > 0.001
-
-UNION ALL
-SELECT deal_uk, account_uk, 'STANDARDPART_FACTOR', TO_CHAR(exp_std_factor), TO_CHAR(act_std_factor)
-FROM joined_data WHERE ABS(NVL(exp_std_factor, -1) - NVL(act_std_factor, -1)) > 0.001
-
-ORDER BY deal_uk, attribute_name;
+SELECT 
+    'Количество записей, которые попадут в поток (с учетом джойна по RATETYPE=1)' as description,
+    count(*) as count_rows
+FROM dwh4dm.dealrateinfo_shist
+WHERE deal_uk = 5238061313 AND ratetype_uk = 1;
