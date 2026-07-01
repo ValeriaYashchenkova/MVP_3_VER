@@ -1,13 +1,10 @@
 WITH target_data AS (
-    -- Данные из твоей витрины
-    SELECT deal_uk, ftp_rate as actual_ftp, effective_from as load_date
+    SELECT deal_uk, ftp_rate as actual_ftp
     FROM DWH4DM.MORTGAGE_FTP_SHIST
-    WHERE deal_uk = 5238061313 -- ID твоей сделки
+    WHERE deal_uk = 5238061313
       AND effective_to = TO_DATE('31.12.5999', 'dd.mm.yyyy')
 ),
 source_data AS (
-    -- Эталон: ищем единственную верную ставку на момент начала сделки
-    -- Используем фильтр по RATETYPE_UK = 1 и берем MAX(effective_from)
     SELECT deal_uk, int_rate as expected_ftp
     FROM (
         SELECT deal_uk, int_rate,
@@ -15,8 +12,8 @@ source_data AS (
         FROM DWH4DM.DEALRATEINFO_SHIST
         WHERE deal_uk = 5238061313
           AND ratetype_uk = 1
-          -- Важно: ставка должна быть актуальна на момент СТАРТА сделки
-          AND effective_from <= (SELECT start_date FROM DWH4DM.DEAL_EDIM WHERE uk = 5238061313)
+          -- Исправленный подзапрос: берем максимум, чтобы избежать ORA-01427
+          AND effective_from <= (SELECT MAX(start_date) FROM DWH4DM.DEAL_EDIM WHERE uk = 5238061313)
     )
     WHERE rn = 1
 )
@@ -25,7 +22,7 @@ SELECT
     t.actual_ftp,
     s.expected_ftp,
     CASE 
-        WHEN ABS(t.actual_ftp - s.expected_ftp) > 0.001 THEN 'ДЕФЕКТ: Ставка неверная'
+        WHEN ABS(NVL(t.actual_ftp, 0) - NVL(s.expected_ftp, 0)) > 0.001 THEN 'ДЕФЕКТ: Ставка неверная'
         ELSE 'OK'
     END as status
 FROM target_data t
