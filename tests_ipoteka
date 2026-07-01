@@ -1,32 +1,32 @@
-WITH ks_uk as (
-  select /*+ cardinality(1) materialize */ c.uk from dwh4dm.stockindex_sdim c where c.name_short = 'KS' and c.deleted_flag = 'N' and rownum = 1
+WITH target_data AS (
+    -- Данные из твоей витрины
+    SELECT deal_uk, ftp_rate as actual_ftp, effective_from as load_date
+    FROM DWH4DM.MORTGAGE_FTP_SHIST
+    WHERE deal_uk = 5238061313 -- ID твоей сделки
+      AND effective_to = TO_DATE('31.12.5999', 'dd.mm.yyyy')
 ),
-stockindexrate as (
-  select /*+ cardinality(1) materialize */ b.rate from dwh4dm.stockindexrate_shist b join ks_uk c on c.uk = b.stockindex_uk where b.deleted_flag = 'N' and trunc(to_date('$$P_OPERATION_DAY', 'yyyymmdd'), 'MM') >= b.effective_from and trunc(to_date('$$P_OPERATION_DAY', 'yyyymmdd'), 'MM') < b.effective_to and rownum = 1
-),
-d2a as (
-  select d2a.account_uk, d2a.deal2accttype_uk, d2a.deal_uk from dwh4dm.deal2acct_shist d2a where d2a.deal2accttype_uk in (1,3) and d2a.deleted_flag = 'N' and to_date('$$P_OPERATION_DAY', 'yyyymmdd') >= d2a.effective_from and to_date('$$P_OPERATION_DAY', 'yyyymmdd') < d2a.effective_to
-),
-product as (
-  select product_uk, uk, ccode from (select p2p.product_uk, pg.uk, pg.ccode, row_number() over (partition by p2p.product_uk order by pgts.ccode desc) rn from dwh4dm.product2productgroup_shist p2p join dwh4dm.productgroup_sdim pg on p2p.productgroup_uk = pg.uk and pg.deleted_flag = 'N' and pg.name = 'Ипотека' join dwh4dm.productgrouptype_sdim pgts on pg.productgrouptype_uk = pgts.uk and pgts.ccode in ('FTP', 'FTP_NEW') where p2p.deleted_flag = 'N' and p2p.effective_to = to_date('59991231', 'YYYYMMDD')) t where rn = 1
-),
-deal_diag as (
-    select d.uk as deal_uk
-    from dwh4dm.deal_edim d
-    join product pg on d.product_uk = pg.product_uk
-    join d2a on d.uk = d2a.deal_uk
-    left join dwh4dm.dealrateinfo_shist dri on d.uk = dri.deal_uk and dri.deleted_flag = 'N'
-    where d.uk = 5238061313
-    -- Вот здесь разработчик берет ВСЕ записи из dealrateinfo_shist!
+source_data AS (
+    -- Эталон: ищем единственную верную ставку на момент начала сделки
+    -- Используем фильтр по RATETYPE_UK = 1 и берем MAX(effective_from)
+    SELECT deal_uk, int_rate as expected_ftp
+    FROM (
+        SELECT deal_uk, int_rate,
+               ROW_NUMBER() OVER (PARTITION BY deal_uk ORDER BY effective_from DESC) as rn
+        FROM DWH4DM.DEALRATEINFO_SHIST
+        WHERE deal_uk = 5238061313
+          AND ratetype_uk = 1
+          -- Важно: ставка должна быть актуальна на момент СТАРТА сделки
+          AND effective_from <= (SELECT start_date FROM DWH4DM.DEAL_EDIM WHERE uk = 5238061313)
+    )
+    WHERE rn = 1
 )
 SELECT 
-    'Количество записей в dealrateinfo_shist для сделки' as description,
-    count(*) as count_rows
-FROM dwh4dm.dealrateinfo_shist
-WHERE deal_uk = 5238061313
-UNION ALL
-SELECT 
-    'Количество записей, которые попадут в поток (с учетом джойна по RATETYPE=1)' as description,
-    count(*) as count_rows
-FROM dwh4dm.dealrateinfo_shist
-WHERE deal_uk = 5238061313 AND ratetype_uk = 1;
+    t.deal_uk,
+    t.actual_ftp,
+    s.expected_ftp,
+    CASE 
+        WHEN ABS(t.actual_ftp - s.expected_ftp) > 0.001 THEN 'ДЕФЕКТ: Ставка неверная'
+        ELSE 'OK'
+    END as status
+FROM target_data t
+JOIN source_data s ON t.deal_uk = s.deal_uk;
