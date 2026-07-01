@@ -104,7 +104,7 @@ test_07_ks_factor AS (
     FROM DWH4DM.MORTGAGE_FTP_SHIST
     WHERE ks_factor <> 
         CASE 
-            WHEN ks_factor > 0 THEN ROUND(ks_factor, 2) -- Проверка, что он не перезатерся
+            WHEN ks_factor > 0 THEN ROUND(ks_factor, 2)
             WHEN is_old_flag = 'Y' AND program = 'Без ГП' THEN 0
             WHEN is_old_flag = 'Y' AND program <> 'Без ГП' THEN 1
             ELSE 0 
@@ -125,7 +125,6 @@ test_08_spread AS (
             ELSE ftp_rate 
         END AS error_details
     FROM DWH4DM.MORTGAGE_FTP_SHIST
-    -- Сравниваем через ABS для исключения микро-погрешностей округления float
     WHERE ABS(spread_rate - 
         CASE 
             WHEN ks_factor > 0 THEN ftp_rate - (ROUND(ks_factor, 2) * ks_rate)
@@ -148,6 +147,7 @@ test_09_change_ftp_flag AS (
         SELECT 
             deal_uk, 
             account_uk, 
+            effective_from,
             ftp_rate, 
             spread_rate, 
             change_ftp_flag,
@@ -157,10 +157,8 @@ test_09_change_ftp_flag AS (
     )
     WHERE prev_ftp IS NOT NULL 
       AND (
-          -- Ставка и спред изменились, но флаг не Y
           (ftp_rate <> prev_ftp AND spread_rate <> prev_spread AND NVL(change_ftp_flag, 'N') <> 'Y')
           OR 
-          -- Ставка изменилась, но спред остался прежним, а флаг ошибочно стоит Y
           (ftp_rate <> prev_ftp AND spread_rate = prev_spread AND NVL(change_ftp_flag, 'N') = 'Y')
       )
 ),
@@ -190,4 +188,4 @@ UNION ALL SELECT * FROM test_07_ks_factor
 UNION ALL SELECT * FROM test_08_spread
 UNION ALL SELECT * FROM test_09_change_ftp_flag
 UNION ALL SELECT * FROM test_10_null_flags
-ORDER BY test_name, deal_uk, account_uk;
+ORDER BY 1, 2, 3;
